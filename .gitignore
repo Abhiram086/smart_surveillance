@@ -1,0 +1,31 @@
+# virtual environment
+venv/
+.env/
+
+# python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS junk
+.DS_Store
+Thumbs.db
+.Trash-*
+
+# IDE
+.vscode/
+.idea/
+
+# outputs
+runs/
+outputs/
+cache/
+
+# large datasets
+datasets/
+
+# temp
+*.log
+*.tmp
+*.bak

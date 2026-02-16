@@ -1,0 +1,21 @@
+ultralytics
+opencv-python-headless
+numpy
+scipy
+matplotlib
+shapely
+filterpy
+lap
+imutils
+PyYAML
+requests
+pillow
+psutil
+polars
+
+
+For GPU users
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+For CPU users
+pip install torch torchvision torchaudio
