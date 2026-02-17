@@ -1,6 +1,7 @@
 {
   "camera_name": "metro_platform_1",
   "scenario": "LINE_CROSSING",
-  "video": "videos/campus2.mp4",
-  "description": "Metro platform yellow line monitoring"
+  "video": 0,
+  "line": [[200, 400], [1000, 400]],
+  "restricted_point": [500, 450]
 }

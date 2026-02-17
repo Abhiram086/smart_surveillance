@@ -4,9 +4,8 @@ from ultralytics import YOLO
 from collections import defaultdict, deque
 import math
 import torch
-import os
 
-def run_behavior(video_path, cfg):
+def run_behavior(video_path, cfg, stream=False):
 
     CONFIDENCE = cfg.get("confidence", 0.01)
     INFER_WIDTH = 640
@@ -26,10 +25,8 @@ def run_behavior(video_path, cfg):
     print(f"[INFO] Using device: {DEVICE}")
 
     # -------- AUTO MODEL DOWNLOAD --------
-    # Ultralytics automatically downloads if not available
     model = YOLO("yolov8n")
 
-    # Fuse safely (may fail on CPU — ignore)
     try:
         model.fuse()
     except Exception:
@@ -55,9 +52,13 @@ def run_behavior(video_path, cfg):
 
     while True:
         start = time.time()
+
         ret, frame = cap.read()
+
+        # LOOP VIDEO (important for demos)
         if not ret:
-            break
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            continue
 
         h, w = frame.shape[:2]
         scale = INFER_WIDTH / w
@@ -78,11 +79,14 @@ def run_behavior(video_path, cfg):
 
             for box, tid in zip(r.boxes.xyxy, r.boxes.id):
                 x1, y1, x2, y2 = map(int, box)
+
+                # scale back to original frame
                 x1, y1 = int(x1/scale), int(y1/scale)
                 x2, y2 = int(x2/scale), int(y2/scale)
-                tid = int(tid)
 
+                tid = int(tid)
                 cx, cy = (x1+x2)//2, (y1+y2)//2
+
                 track_history[tid].append((cx, cy))
 
                 speed = 0
@@ -126,14 +130,18 @@ def run_behavior(video_path, cfg):
                 cv2.putText(frame,f"ID {tid}",(x1,y1-10),
                             cv2.FONT_HERSHEY_SIMPLEX,0.6,color,2)
 
-        cv2.imshow("Behavior Monitoring", frame)
+        # ===== STREAM OR WINDOW =====
+        if stream:
+            yield frame
+        else:
+            cv2.imshow("Behavior Monitoring", frame)
 
-        delay = frame_time - (time.time()-start)
-        if delay > 0:
-            time.sleep(delay)
+            delay = frame_time - (time.time()-start)
+            if delay > 0:
+                time.sleep(delay)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
     cap.release()
     cv2.destroyAllWindows()
