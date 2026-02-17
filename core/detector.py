@@ -3,6 +3,8 @@ import time
 from ultralytics import YOLO
 from collections import defaultdict, deque
 import math
+import torch
+import os
 
 def run_behavior(video_path, cfg):
 
@@ -19,9 +21,19 @@ def run_behavior(video_path, cfg):
 
     IDLE, POSSIBLE, RUNNING = 0, 1, 2
 
-    model = YOLO("yolov8n.pt")
-    model.to("cuda")
-    model.fuse()
+    # -------- DEVICE AUTO SELECT --------
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"[INFO] Using device: {DEVICE}")
+
+    # -------- AUTO MODEL DOWNLOAD --------
+    # Ultralytics automatically downloads if not available
+    model = YOLO("yolov8n")
+
+    # Fuse safely (may fail on CPU — ignore)
+    try:
+        model.fuse()
+    except Exception:
+        pass
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -56,7 +68,7 @@ def run_behavior(video_path, cfg):
             persist=True,
             classes=[0],
             conf=CONFIDENCE,
-            device="cuda",
+            device=DEVICE,
             imgsz=INFER_WIDTH
         )
 
