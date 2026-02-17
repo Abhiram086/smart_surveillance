@@ -1,31 +1,37 @@
-# virtual environment
-venv/
-.env/
-
-# python cache
+# ---------------- Python ----------------
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# OS junk
+# ---------------- Virtual Environment ----------------
+venv/
+.env/
+
+# ---------------- Models ----------------
+*.pt
+*.onnx
+*.engine
+
+# ---------------- Videos / Runtime Assets ----------------
+videos/
+
+# ---------------- Logs ----------------
+*.log
+*.tmp
+*.bak
+
+# ---------------- OS ----------------
 .DS_Store
 Thumbs.db
 .Trash-*
 
-# IDE
+# ---------------- IDE ----------------
 .vscode/
 .idea/
 
-# outputs
+# ---------------- Training Outputs ----------------
 runs/
 outputs/
 cache/
-
-# large datasets
 datasets/
-
-# temp
-*.log
-*.tmp
-*.bak
