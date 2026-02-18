@@ -10,17 +10,151 @@ export default function Admin() {
   const [activeZones, setActiveZones] = useState(0);
   const [totalEvents, setTotalEvents] = useState(0);
   const [activeAlerts, setActiveAlerts] = useState(0);
-  const [cameras, setCameras] = useState<Array<{ id: string; name: string; status: string; source: string; type: "ip" | "webcam" | "file" }>>([]);
+  type Camera = {
+    id: string;
+    name: string;
+    status: string;
+    source: string;              // URL used for display (blob or http)
+    type: "ip" | "webcam" | "file";
+    serverSource?: string;       // path that backend can open (for files)
+  };
+
+  const [cameras, setCameras] = useState<Camera[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
+  const [drawingLine, setDrawingLine] = useState(false);
+  const [savedCamera, setSavedCamera] = useState<Camera | null>(null);
+  const [activeScenarioCamId, setActiveScenarioCamId] = useState<string | null>(null);
+  const [streamStatus, setStreamStatus] = useState<Record<string, "connecting" | "ok" | "error">>({});
+  const [aspectRatios, setAspectRatios] = useState<Record<string, number>>({});
+  const [videoDims, setVideoDims] = useState<Record<string, {w: number; h: number}>>({});
+
+  const selectedDims = selectedCamera ? videoDims[selectedCamera] : undefined;
+  const videoReady = !!selectedDims; // have natural size
+
+  // pause currently playing video when entering draw mode, resume when leaving
+  React.useEffect(() => {
+    if (drawingLine) {
+      const vids = Array.from(document.querySelectorAll<HTMLVideoElement>('video[data-cam-id]'));
+      vids.forEach(v => v.pause());
+    }
+    // do not auto-play when drawingLine turns false; user can manually resume
+  }, [drawingLine]);
   const [showAddCameraModal, setShowAddCameraModal] = useState(false);
   const [newCameraName, setNewCameraName] = useState("");
   const [newCameraSource, setNewCameraSource] = useState("");
   const [newCameraType, setNewCameraType] = useState<"ip" | "webcam" | "file">("ip");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleStartScenario = () => {
-    if (scenario) {
-      setStatus("Running");
+  // scenario-specific helper state
+  const [linePoints, setLinePoints] = useState<Array<{ x: number; y: number }>>([]);
+  const [restrictedPoint, setRestrictedPoint] = useState<{ x: number; y: number } | null>(null);
+
+  const handleStartScenario = async () => {
+    if (!scenario) return;
+
+    // guard missing scenario config
+    if (scenario === "metro_line") {
+      if (linePoints.length < 2 || !restrictedPoint) {
+        alert("Please draw the safety line (two clicks) and select a restricted-side point before starting.");
+        return;
+      }
+    }
+
+    if (status === "Running") {
+      // stop the scenario and restore the replaced camera if any
+      setStatus("Idle");
+      let updatedList = cameras;
+      if (savedCamera && activeScenarioCamId) {
+        updatedList = cameras.map(c =>
+          c.id === activeScenarioCamId ? savedCamera : c
+        );
+        setCameras(updatedList);
+      }
+      setSavedCamera(null);
+      setActiveScenarioCamId(null);
+      // select first available camera from updated list
+      setSelectedCamera(updatedList.length ? updatedList[0].id : null);
+      setLinePoints([]);
+      setRestrictedPoint(null);
+      setScenario(null);
+      setStreamStatus({});
+      return;
+    }
+
+    setStatus("Running");
+    setDrawingLine(false);
+
+    const params = new URLSearchParams();
+    if (scenario === "metro_line") {
+      if (linePoints.length === 2) {
+        const [p1, p2] = linePoints;
+        params.append("line", `${p1.x},${p1.y},${p2.x},${p2.y}`);
+      }
+      if (restrictedPoint) {
+        params.append("restricted_point", `${restrictedPoint.x},${restrictedPoint.y}`);
+      }
+    }
+
+    const cam = cameras.find(c => c.id === selectedCamera);
+    if (cam && cam.type === "file" && !cam.serverSource && !cam.source.startsWith("blob:")) {
+      // file camera added by typing path - backend cannot access it
+      alert("Please upload the video file via the upload button before starting a scenario.");
+      setStatus("Idle");
+      return;
+    }
+    if (cam) {
+      if (cam.type === "file") {
+        let videoParam: string | undefined;
+        if (cam.serverSource) {
+          videoParam = cam.serverSource;
+        } else if (cam.source.startsWith("blob:")) {
+          try {
+            const blobResp = await fetch(cam.source);
+            const blob = await blobResp.blob();
+            const file = new File([blob], cam.name);
+            const form = new FormData();
+            form.append("file", file);
+            const resp = await fetch("http://127.0.0.1:8000/upload", {
+              method: "POST",
+              body: form,
+            });
+            const data = await resp.json();
+            videoParam = data.location;
+            setCameras(prev =>
+              prev.map(c =>
+                c.id === cam.id ? { ...c, serverSource: videoParam } : c
+              )
+            );
+          } catch (err) {
+            console.error("failed to upload blob video", err);
+          }
+        } else {
+          videoParam = cam.source;
+        }
+        if (videoParam) {
+          params.append("video", videoParam);
+        }
+      } else if (cam.source) {
+        params.append("video", cam.source);
+      }
+    }
+
+    const streamUrl = `http://127.0.0.1:8000/stream/${scenario}?${params.toString()}`;
+    console.log("Starting scenario stream", streamUrl);
+
+    // replace the selected camera with the scenario stream
+    if (cam) {
+      setSavedCamera(cam);
+      setActiveScenarioCamId(cam.id);
+      setStreamStatus(prev => ({ ...prev, [cam.id]: "connecting" }));
+      const updated: Camera = {
+        ...cam,
+        source: streamUrl,
+        type: "ip",
+        name: "Scenario Output",
+      };
+      setCameras(prev => prev.map(c => (c.id === cam.id ? updated : c)));
+      setSelectedCamera(cam.id);
     }
   };
 
@@ -42,27 +176,94 @@ export default function Admin() {
     }
   };
 
+  const handleVideoClick = (
+    e: React.MouseEvent<HTMLDivElement>,
+    cam: Camera
+  ) => {
+    // record clicks only when in line‑drawing mode for metro_line and the
+    // click is on the selected camera that is not currently replaced by the
+    // scenario output stream.
+    if (
+      scenario === "metro_line" &&
+      drawingLine &&
+      selectedCamera === cam.id &&
+      cam.id !== activeScenarioCamId
+    ) {
+      if (!videoDims[cam.id]) {
+        // ignore clicks until metadata loads
+        return;
+      }
+      const rect = e.currentTarget.getBoundingClientRect();
+
+      // compute dimensions of actual video content within the container
+      const dims = videoDims[cam.id];
+      let vw = dims?.w || rect.width;
+      let vh = dims?.h || rect.height;
+      const scale = Math.min(rect.width / vw, rect.height / vh);
+      const contentW = vw * scale;
+      const contentH = vh * scale;
+      const offsetX = (rect.width - contentW) / 2;
+      const offsetY = (rect.height - contentH) / 2;
+
+      // position within content
+      let cx = e.clientX - rect.left - offsetX;
+      let cy = e.clientY - rect.top - offsetY;
+      // clamp
+      cx = Math.max(0, Math.min(contentW, cx));
+      cy = Math.max(0, Math.min(contentH, cy));
+
+      // scale back to video coordinates
+      const x = Math.round(cx * (vw / contentW));
+      const y = Math.round(cy * (vh / contentH));
+
+      if (linePoints.length < 2) {
+        setLinePoints([...linePoints, { x, y }]);
+      } else if (!restrictedPoint) {
+        setRestrictedPoint({ x, y });
+        setDrawingLine(false); // done drawing after third click
+      }
+    }
+  };
+
   const handleUploadVideo = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const fileURL = URL.createObjectURL(file);
-      const newCamera = {
-        id: `camera_${Date.now()}`,
-        name: file.name,
-        status: "Video File",
-        source: fileURL,
-        type: "file" as const
-      };
-      setCameras([...cameras, newCamera]);
-      setSelectedCamera(newCamera.id);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+    if (!file) return;
+
+    const fileURL = URL.createObjectURL(file);
+
+    // upload the file so backend can access it for scenario processing
+    const form = new FormData();
+    form.append("file", file);
+    let serverPath: string | undefined;
+    try {
+      const resp = await fetch("http://127.0.0.1:8000/upload", {
+        method: "POST",
+        body: form,
+      });
+      const data = await resp.json();
+      serverPath = data.location;
+    } catch (err) {
+      console.error("upload failed", err);
+    }
+
+    const newCamera: Camera = {
+      id: `camera_${Date.now()}`,
+      name: file.name,
+      status: "Video File",
+      source: fileURL,
+      type: "file",
+      serverSource: serverPath,
+    };
+    setCameras([...cameras, newCamera]);
+    setSelectedCamera(newCamera.id);
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -82,24 +283,175 @@ export default function Admin() {
     return 2;
   };
 
-  const renderCameraFeed = (camera: any) => {
+  const renderCameraFeed = (camera: Camera) => {
+    // common click handler and cursor style
+    const isInteractive =
+      scenario === "metro_line" &&
+      selectedCamera === camera.id &&
+      camera.id !== activeScenarioCamId;
+
+    const baseCursor = isInteractive ? "crosshair" : "default";
+
+    const clickProps = {
+      onClick: (e: React.MouseEvent<HTMLDivElement>) => handleVideoClick(e, camera),
+    };
+
+    // aspect ratio for this camera
+    // until we know the real ratio default to square to avoid jumps
+    const ratio = aspectRatios[camera.id] || 1;
+
+    const wrapperStyle: React.CSSProperties = {
+      width: "100%",
+      position: "relative",
+      aspectRatio: ratio,
+      background: "black",
+    };
+
+    // helper that wraps content in a clickable overlay when in draw mode
+    const withOverlay = (content: React.ReactNode) => {
+      let wrapped = content;
+      if (drawingLine && isInteractive) {
+        wrapped = (
+          <div style={{ position: "relative" }}>
+            {content}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                cursor: "crosshair",
+              }}
+              onClick={(e) => handleVideoClick(e as any, camera)}
+            />
+          </div>
+        );
+      }
+      // add line overlay always if we have video dims
+      const dims = videoDims[camera.id];
+      if (dims) {
+        const makePct = (val: number, dim: number) => (val / dim) * 100;
+        const points = linePoints.map(p => ({
+          x: makePct(p.x, dims.w),
+          y: makePct(p.y, dims.h),
+        }));
+        const restrictedPct = restrictedPoint
+          ? { x: makePct(restrictedPoint.x, dims.w), y: makePct(restrictedPoint.y, dims.h) }
+          : null;
+
+        wrapped = (
+          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+            {wrapped}
+            <svg
+              style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+            >
+              {points.length >= 2 && (
+                <line
+                  x1={`${points[0].x}%`} y1={`${points[0].y}%`}
+                  x2={`${points[1].x}%`} y2={`${points[1].y}%`}
+                  stroke="#f59e0b" strokeWidth="2"
+                />
+              )}
+              {points.map((p, i) => (
+                <circle
+                  key={i}
+                  cx={`${p.x}%`} cy={`${p.y}%`}
+                  r="3" fill="#f59e0b"
+                />
+              ))}
+              {restrictedPct && (
+                <circle
+                  cx={`${restrictedPct.x}%`} cy={`${restrictedPct.y}%`}
+                  r="5" fill="#ef4444"
+                />
+              )}
+            </svg>
+          </div>
+        );
+      }
+      return wrapped;
+    };
+
+    // if this is a backend MJPEG stream, use <img> since <video> cannot handle
+    // multipart/x-mixed-replace type
+    if (
+      camera.source.startsWith("http") &&
+      camera.source.includes("/stream/")
+    ) {
+      // show status overlays for connecting/error
+      const status = streamStatus[camera.id];
+      return withOverlay(
+        <div style={wrapperStyle}>
+          {!videoReady && (
+            <div style={{...styles.overlay, visibility: "visible"}}>
+              Loading video…
+            </div>
+          )}
+          {status === "connecting" && (
+            <div style={styles.overlay}>Connecting…</div>
+          )}
+          {status === "error" && (
+            <div style={styles.overlay}>Stream error – check console/server log</div>
+          )}
+          <img
+            key={camera.id}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              cursor: baseCursor,
+            }}
+            src={camera.source}
+            onLoad={(e) => {
+              const img = e.currentTarget as HTMLImageElement;
+              if (img.naturalWidth && img.naturalHeight) {
+                setAspectRatios(prev => ({
+                  ...prev,
+                  [camera.id]: img.naturalWidth / img.naturalHeight,
+                }));
+                setVideoDims(prev => ({
+                  ...prev,
+                  [camera.id]: { w: img.naturalWidth, h: img.naturalHeight },
+                }));
+              }
+              setStreamStatus(prev => ({ ...prev, [camera.id]: "ok" }));
+            }}
+            onError={() => setStreamStatus(prev => ({ ...prev, [camera.id]: "error" }))}
+          />
+        </div>
+      );
+    }
+
     // For IP cameras (RTMP/HLS streams)
     if (camera.type === "ip" && camera.source.startsWith("http")) {
-      return (
-        <video
-          key={camera.id}
-          style={styles.videoStream}
-          controls
-          autoPlay
-          muted
-          src={camera.source}
-        />
+      return withOverlay(
+        <div style={wrapperStyle}>
+          <video
+            key={camera.id}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+            }}
+            controls={!drawingLine}
+            autoPlay
+            muted
+            src={camera.source}
+            onLoadedMetadata={(e) => {
+              const vid = e.currentTarget as HTMLVideoElement;
+              if (vid.videoWidth && vid.videoHeight) {
+                setAspectRatios(prev => ({
+                  ...prev,
+                  [camera.id]: vid.videoWidth / vid.videoHeight,
+                }));
+              }
+            }}
+          />
+        </div>
       );
     }
     // For webcam or live feeds
     if (camera.type === "webcam") {
       return (
-        <div style={styles.cameraFeedContent}>
+        <div style={styles.cameraFeedContent} {...clickProps}>
           <div style={{ fontSize: "24px", marginBottom: "10px" }}>🎥</div>
           <p style={styles.cameraStatus}>{camera.source}</p>
         </div>
@@ -107,16 +459,43 @@ export default function Admin() {
     }
     // For uploaded video files
     if (camera.type === "file") {
-      return (
-        <video
-          key={camera.id}
-          style={styles.videoStream}
-          controls
-          src={camera.source}
-        />
+      return withOverlay(
+        <div style={wrapperStyle}>
+          {!videoReady && (
+            <div style={{...styles.overlay, visibility: "visible"}}>
+              Loading video…
+            </div>
+          )}
+          <video
+            key={camera.id}
+            data-cam-id={camera.id}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+            }}
+            controls={!drawingLine}
+            autoPlay={!drawingLine}
+            loop
+            src={camera.source}
+            onLoadedMetadata={(e) => {
+              const vid = e.currentTarget as HTMLVideoElement;
+              if (vid.videoWidth && vid.videoHeight) {
+                setAspectRatios(prev => ({
+                  ...prev,
+                  [camera.id]: vid.videoWidth / vid.videoHeight,
+                }));
+                setVideoDims(prev => ({
+                  ...prev,
+                  [camera.id]: { w: vid.videoWidth, h: vid.videoHeight },
+                }));
+              }
+            }}
+          />
+        </div>
       );
     }
-    return (
+    return withOverlay(
       <div style={styles.cameraFeedContent}>
         <div style={styles.cameraIcon}>📹</div>
         <p style={styles.cameraStatus}>{camera.status}</p>
@@ -148,8 +527,12 @@ export default function Admin() {
           <div style={styles.videoPanelHeader}>
             <div style={styles.panelTitle}>📷 Video Feed</div>
             <div style={styles.videoControls}>
-              <select style={styles.select}>
-                <option>Select Camera</option>
+              <select
+                style={styles.select}
+                value={selectedCamera || ""}
+                onChange={(e) => setSelectedCamera(e.target.value || null)}
+              >
+                <option value="">Select Camera</option>
                 {cameras.map(cam => (
                   <option key={cam.id} value={cam.id}>{cam.name}</option>
                 ))}
@@ -206,7 +589,12 @@ export default function Admin() {
             <select
               style={styles.scenarioSelect}
               value={scenario || ""}
-              onChange={(e) => setScenario(e.target.value || null)}
+              onChange={(e) => {
+                setScenario(e.target.value || null);
+                // reset any previous line configuration when scenario changes
+                setLinePoints([]);
+                setRestrictedPoint(null);
+              }}
             >
               <option value="">Choose a scenario</option>
               <option value="behavior">Behavior Detection</option>
@@ -214,9 +602,45 @@ export default function Admin() {
             </select>
           </div>
 
-          {/* Start Button */}
+          {/* scenario-specific configuration */}
+          {scenario === "metro_line" && (
+            <div style={styles.controlSection}>
+              <p style={{ margin: "8px 0", fontSize: 14 }}>
+                {drawingLine
+                  ? "Click two points to draw the line, then a third point for the restricted side."
+                  : "Press the button below to start defining the line on the selected camera feed."}
+              </p>
+              <button
+                style={styles.smallButton}
+                onClick={() => {
+                  setDrawingLine(!drawingLine);
+                  if (!drawingLine) {
+                    // starting new drawing – clear previous
+                    setLinePoints([]);
+                    setRestrictedPoint(null);
+                  }
+                }}
+                disabled={!videoReady}
+              >
+                {drawingLine ? "Cancel Draw" : "Draw Line"}
+              </button>
+              {!videoReady && (
+                <p style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>
+                  Wait for video to load before drawing
+                </p>
+              )}
+              <p style={{ margin: "4px 0", fontSize: 12, color: "#9ca3af" }}>
+                Line points: {linePoints.map(p => `(${p.x},${p.y})`).join(" → ")}
+              </p>
+              <p style={{ margin: "4px 0", fontSize: 12, color: "#9ca3af" }}>
+                Restricted pt: {restrictedPoint ? `(${restrictedPoint.x},${restrictedPoint.y})` : "(none)"}
+              </p>
+            </div>
+          )}
+
+          {/* Start/Stop Button */}
           <button style={styles.startButton} onClick={handleStartScenario}>
-            ▶ Start
+            {status === "Running" ? "■ Stop" : "▶ Start"}
           </button>
 
           {/* Draw Zone Button */}
@@ -569,6 +993,17 @@ const styles: any = {
     marginBottom: "15px"
   },
 
+  smallButton: {
+    padding: "8px 12px",
+    borderRadius: "5px",
+    border: "none",
+    background: "#2563eb",
+    color: "white",
+    cursor: "pointer",
+    fontSize: "13px",
+    margin: "6px 0"
+  },
+
   statusBox: {
     marginTop: "20px",
     padding: "15px",
@@ -714,7 +1149,7 @@ const styles: any = {
 
   videoStream: {
     width: "100%",
-    height: "200px",
+    // height handled by wrapper's aspect-ratio style
     background: "black",
     borderRadius: "8px",
     objectFit: "cover" as const

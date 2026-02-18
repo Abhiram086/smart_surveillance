@@ -31,8 +31,7 @@ def run(video, cfg, stream=False):
 
     cap = cv2.VideoCapture(video)
     if not cap.isOpened():
-        print("ERROR: Cannot open video")
-        return
+        raise RuntimeError(f"Cannot open video: {video}")
 
     while True:
         ret, frame = cap.read()
