@@ -53,7 +53,7 @@ export default function Landing() {
     <motion.button
     variants={pop}
     style={styles.btnSecondary}
-    onClick={() => nav("/user")}
+    onClick={() => nav("/viewer")}
     >
     Viewer Mode
     </motion.button>

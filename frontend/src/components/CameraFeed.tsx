@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react"
 
 type Props = {
-  scenario: string
+  scenario: string;
+  token?: string | null; // unique token for start/stop control
 }
 
-export default function CameraFeed({ scenario }: Props) {
+export default function CameraFeed({ scenario, token = null }: Props) {
 
   const [reload, setReload] = useState(0)
   const [connected, setConnected] = useState(false)
 
-  // backend stream url
-  const url = `http://127.0.0.1:8000/stream/${scenario}?t=${reload}`
+  // backend stream url, include token when provided so backend knows how to
+  // shut itself down when requested by a stop call.
+  const url = `http://127.0.0.1:8000/stream/${scenario}?t=${reload}` +
+    (token ? `&token=${token}` : "");
 
   // when scenario changes → reconnect stream
   useEffect(() => {
@@ -26,6 +29,18 @@ export default function CameraFeed({ scenario }: Props) {
 
     return () => clearInterval(interval)
   }, [])
+
+  // when component unmounts or token changes, inform backend to stop the
+  // previous stream (if a token was being used). this prevents dangling
+  // processing after the user navigates away.
+  useEffect(() => {
+    return () => {
+      if (token) {
+        fetch(`http://127.0.0.1:8000/stop?token=${token}`, { method: "POST" })
+          .catch(() => {});
+      }
+    };
+  }, [token]);
 
   return (
     <div style={styles.container}>
