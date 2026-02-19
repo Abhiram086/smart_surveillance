@@ -13,6 +13,11 @@ from scenarios.behavior import run as behavior_run
 from scenarios.line_crossing import run as metro_run
 
 
+# simple in-memory registry of stop signals keyed by token.  the
+# frontend can POST to ``/stop`` to set a flag here; the generator will
+# notice and break out the next time it produces a frame.
+stop_signals: dict[str, bool] = {}
+
 async def await_request_disconnected(request: Request) -> bool:
     """Return True if the client has disconnected from the request.
 
@@ -33,6 +38,7 @@ async def frame_generator(
     line: str | None = None,
     restricted_point: str | None = None,
     video: str | None = None,
+    token: str | None = None,
 ):
     """Asynchronous generator that yields frames until the client disconnects.
 
@@ -132,6 +138,10 @@ async def frame_generator(
         # break loop if client disconnected
         if await request.is_disconnected():
             print("[INFO] client disconnected, stopping generator")
+            break
+        # break if frontend explicitly asked us to stop the stream
+        if token and stop_signals.get(token):
+            print(f"[INFO] stop signal received for token {token}")
             break
 
         _, buffer = cv2.imencode('.jpg', frame)

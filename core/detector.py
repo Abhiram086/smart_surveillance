@@ -5,6 +5,7 @@ from collections import defaultdict, deque
 import math
 import torch
 
+
 def run_behavior(video_path, cfg, stream=False):
 
     CONFIDENCE = cfg.get("confidence", 0.01)
@@ -14,17 +15,17 @@ def run_behavior(video_path, cfg, stream=False):
     MIN_ACCELERATION = cfg.get("min_acceleration", 120)
     MIN_DISTANCE = cfg.get("min_distance", 100)
 
+    LOITER_TIME = cfg.get("loiter_time", 8)
+    LOITER_RADIUS = cfg.get("loiter_radius", 60)
+
     POSSIBLE_FRAMES = 4
-    RUNNING_FRAMES = 6
     EMA_ALPHA = 0.4
 
     IDLE, POSSIBLE, RUNNING = 0, 1, 2
 
-    # -------- DEVICE AUTO SELECT --------
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[INFO] Using device: {DEVICE}")
 
-    # -------- AUTO MODEL DOWNLOAD --------
     model = YOLO("yolov8n")
 
     try:
@@ -41,21 +42,41 @@ def run_behavior(video_path, cfg, stream=False):
     fps = fps if fps > 0 else 25
     frame_time = 1.0 / fps
 
-    track_history = defaultdict(lambda: deque(maxlen=30))
+    # TRACKING DATA
+    track_history = defaultdict(lambda: deque(maxlen=int(fps * 15)))
     ema_speed = defaultdict(float)
     prev_ema_speed = defaultdict(float)
     ema_accel = defaultdict(float)
     distance_window = defaultdict(float)
 
+    # STATES
     state = defaultdict(lambda: IDLE)
     state_counter = defaultdict(int)
 
-    while True:
-        start = time.time()
+    # LOITERING DATA
+    loiter_start_time = defaultdict(lambda: None)
+    is_loitering = defaultdict(lambda: False)
 
+    def check_loitering(tid):
+        history = track_history[tid]
+        if len(history) < fps * LOITER_TIME:
+            return False
+
+        points = list(history)[-int(fps * LOITER_TIME):]
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+
+        dx = max(xs) - min(xs)
+        dy = max(ys) - min(ys)
+        movement = math.sqrt(dx*dx + dy*dy)
+
+        return movement < LOITER_RADIUS
+
+    while True:
+
+        start = time.time()
         ret, frame = cap.read()
 
-        # LOOP VIDEO (important for demos)
         if not ret:
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             continue
@@ -78,9 +99,8 @@ def run_behavior(video_path, cfg, stream=False):
                 continue
 
             for box, tid in zip(r.boxes.xyxy, r.boxes.id):
-                x1, y1, x2, y2 = map(int, box)
 
-                # scale back to original frame
+                x1, y1, x2, y2 = map(int, box)
                 x1, y1 = int(x1/scale), int(y1/scale)
                 x2, y2 = int(x2/scale), int(y2/scale)
 
@@ -89,6 +109,7 @@ def run_behavior(video_path, cfg, stream=False):
 
                 track_history[tid].append((cx, cy))
 
+                # SPEED CALCULATION
                 speed = 0
                 if len(track_history[tid]) >= 2:
                     px, py = track_history[tid][-2]
@@ -102,6 +123,7 @@ def run_behavior(video_path, cfg, stream=False):
                 accel = abs(ema_speed[tid]-prev_ema_speed[tid]) / frame_time
                 ema_accel[tid] = EMA_ALPHA*accel + (1-EMA_ALPHA)*ema_accel[tid]
 
+                # RUNNING DETECTION
                 if state[tid] == IDLE and ema_speed[tid] > MIN_RUNNING_SPEED:
                     state[tid] = POSSIBLE
                     state_counter[tid] = 1
@@ -124,21 +146,53 @@ def run_behavior(video_path, cfg, stream=False):
                     distance_window[tid] = 0
 
                 is_running = state[tid] == RUNNING
-                color = (0,0,255) if is_running else (0,255,0)
+
+                # LOITERING DETECTION
+                if check_loitering(tid):
+                    if loiter_start_time[tid] is None:
+                        loiter_start_time[tid] = time.time()
+
+                    if time.time() - loiter_start_time[tid] > LOITER_TIME:
+                        is_loitering[tid] = True
+                else:
+                    loiter_start_time[tid] = None
+                    is_loitering[tid] = False
+
+                # LABELS
+                label = f"ID {tid}"
+                color = (0,255,0)
+
+                if is_running:
+                    label = "RUNNING"
+                    color = (0,0,255)
+
+                elif is_loitering[tid]:
+                    label = "LOITERING"
+                    color = (255,0,0)
 
                 cv2.rectangle(frame,(x1,y1),(x2,y2),color,2)
-                cv2.putText(frame,f"ID {tid}",(x1,y1-10),
-                            cv2.FONT_HERSHEY_SIMPLEX,0.6,color,2)
+                cv2.putText(frame,label,(x1,y1-10),
+                            cv2.FONT_HERSHEY_SIMPLEX,0.7,color,2)
 
-        # ===== STREAM OR WINDOW =====
         if stream:
             yield frame
+            # throttle output to roughly match original video FPS…
+            elapsed = time.time() - start
+            if elapsed < frame_time:
+                time.sleep(frame_time - elapsed)
+            else:
+                # if we're consistently behind schedule, drop next frame
+                cap.grab()
         else:
             cv2.imshow("Behavior Monitoring", frame)
 
             delay = frame_time - (time.time()-start)
             if delay > 0:
                 time.sleep(delay)
+            elif delay < -frame_time * 0.5:
+                # non-stream mode: if we're more than half a frame late, skip
+                # one to avoid accumulating latency when showing the window
+                cap.grab()
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break

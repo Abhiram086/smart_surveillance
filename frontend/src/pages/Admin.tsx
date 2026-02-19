@@ -27,6 +27,7 @@ export default function Admin() {
   const [streamStatus, setStreamStatus] = useState<Record<string, "connecting" | "ok" | "error">>({});
   const [aspectRatios, setAspectRatios] = useState<Record<string, number>>({});
   const [videoDims, setVideoDims] = useState<Record<string, {w: number; h: number}>>({});
+  const [streamToken, setStreamToken] = useState<string | null>(null);  // unique token for backend stop
 
   const selectedDims = selectedCamera ? videoDims[selectedCamera] : undefined;
   const videoReady = !!selectedDims; // have natural size
@@ -39,6 +40,17 @@ export default function Admin() {
     }
     // do not auto-play when drawingLine turns false; user can manually resume
   }, [drawingLine]);
+
+  // make sure any playing videos are paused when the scenario stops; this is
+  // mostly defensive since the camera object itself will be replaced (which
+  // should change the src), but pausing avoids transient motion and gives
+  // better feedback to the user.
+  React.useEffect(() => {
+    if (status === "Idle") {
+      const vids = Array.from(document.querySelectorAll<HTMLVideoElement>('video[data-cam-id]'));
+      vids.forEach(v => v.pause());
+    }
+  }, [status]);
   const [showAddCameraModal, setShowAddCameraModal] = useState(false);
   const [newCameraName, setNewCameraName] = useState("");
   const [newCameraSource, setNewCameraSource] = useState("");
@@ -61,8 +73,17 @@ export default function Admin() {
     }
 
     if (status === "Running") {
+      // ask backend to kill the stream (token may be null if something went awry)
+      if (streamToken) {
+        fetch(`http://127.0.0.1:8000/stop?token=${streamToken}`, { method: "POST" })
+          .catch(() => {});
+        setStreamToken(null);
+      }
+
       // stop the scenario and restore the replaced camera if any
       setStatus("Idle");
+
+
       let updatedList = cameras;
       if (savedCamera && activeScenarioCamId) {
         updatedList = cameras.map(c =>
@@ -139,8 +160,14 @@ export default function Admin() {
       }
     }
 
+    // generate a one‑time token so that the frontend can later ask the
+    // backend to tear down the stream explicitly.  we include it both in state
+    // and in the query string so the generator picks it up.
+    const token = crypto.randomUUID();
+    params.append("token", token);
     const streamUrl = `http://127.0.0.1:8000/stream/${scenario}?${params.toString()}`;
-    console.log("Starting scenario stream", streamUrl);
+    console.log("Starting scenario stream", streamUrl, "token", token);
+    setStreamToken(token);
 
     // replace the selected camera with the scenario stream
     if (cam) {

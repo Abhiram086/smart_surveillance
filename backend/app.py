@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import os
-from streamer import frame_generator
+from streamer import frame_generator, stop_signals
 
 app = FastAPI()
 
@@ -22,6 +22,7 @@ VIDEOS_DIR = os.path.join(PROJECT_ROOT, "videos")
 os.makedirs(VIDEOS_DIR, exist_ok=True)
 
 app.mount("/videos", StaticFiles(directory=VIDEOS_DIR), name="videos")
+
 
 @app.get("/")
 def root():
@@ -44,6 +45,19 @@ async def upload_video(file: UploadFile = File(...)):
 
     return {"location": f"videos/{file.filename}"}
 
+@app.post("/stop")
+async def stop_stream(token: str):
+    """Signal a running stream identified by *token* to terminate.
+
+    The frontend generates a random token when it starts a scenario and
+    includes it as a query parameter.  Sending a POST to this endpoint with
+    the same token sets a flag that the streaming generator monitors and
+    breaks out immediately.  This allows the UI to stop a video even if the
+    browser connection remains open for some reason.
+    """
+    stop_signals[token] = True
+    return {"stopped": True}
+
 @app.get("/stream/{scenario}")
 def stream_video(
     request: Request,
@@ -51,6 +65,7 @@ def stream_video(
     line: str | None = None,
     restricted_point: str | None = None,
     video: str | None = None,
+    token: str | None = None,
 ):
     """Return a video stream processed by the chosen scenario.
 
@@ -63,7 +78,9 @@ def stream_video(
       value stored in the config file (e.g. camera index or file path).
     """
 
+    # forward an optional token so that the frontend can request a
+    # running stream be stopped explicitly (see /stop below).
     return StreamingResponse(
-        frame_generator(request, scenario, line, restricted_point, video),
+        frame_generator(request, scenario, line, restricted_point, video, token),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
