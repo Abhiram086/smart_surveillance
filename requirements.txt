@@ -1,12 +1,21 @@
+# Server
+fastapi
+uvicorn[standard]
+
+# AI / Vision
 ultralytics
 opencv-python
 numpy
 scipy
 matplotlib
+
+# Tracking / Math
 shapely
 filterpy
 lap
 imutils
+
+# Utilities
 PyYAML
 requests
 pillow
