@@ -14,13 +14,10 @@ export default function AdminLogin() {
     setError("")
     setLoading(true)
 
-    // Simulate login logic
     setTimeout(() => {
       if (username && password) {
         console.log("Admin login:", { username, password })
-        // Here you would typically make an API call
         setLoading(false)
-        // nav to admin dashboard after successful login
       } else {
         setError("Please enter username and password")
         setLoading(false)
@@ -30,7 +27,7 @@ export default function AdminLogin() {
 
   return (
     <div style={styles.wrapper}>
-      {/* Full screen background video */}
+      {/* Background Video */}
       <motion.video
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -44,40 +41,41 @@ export default function AdminLogin() {
         <source src="/videos/16-9.mp4" type="video/mp4" />
       </motion.video>
 
-      {/* Division line */}
+      {/* Fullscreen Glass Overlay */}
       <motion.div
-        initial={{ scaleY: 0, opacity: 0 }}
-        animate={{ scaleY: 1, opacity: 1 }}
-        transition={{ duration: 0.8, delay: 0.2 }}
-        style={styles.divisionLine}
-      />
-
-      {/* Right side - Login Form with liquid glass */}
-      <motion.div
-        initial={{ x: 300, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
+        initial={{ y: "100vh" }}
+        animate={{ y: "0vh" }}
         transition={{ duration: 0.8, ease: "easeOut" }}
         style={styles.formSide}
       >
         <motion.div
-          initial={{ opacity: 0, y: 40, filter: "blur(10px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          transition={{ duration: 0.9 }}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.4, duration: 0.6 }}
           style={styles.formContainer}
         >
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.5, duration: 0.6 }}
             style={styles.title}
           >
-            Admin Login
+            Admin
           </motion.h1>
 
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.6 }}
+            style={styles.subtitle}
+          >
+            Secure access to control systems
+          </motion.p>
+
           <motion.form
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.4 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7, duration: 0.6 }}
             onSubmit={handleLogin}
             style={styles.form}
           >
@@ -88,7 +86,7 @@ export default function AdminLogin() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 style={styles.input}
-                placeholder="Enter your username or email"
+                placeholder="Enter your credentials"
                 required
               />
             </div>
@@ -105,29 +103,44 @@ export default function AdminLogin() {
               />
             </div>
 
-            {error && <div style={styles.error}>{error}</div>}
+            {error && (
+              <motion.div
+                style={styles.error}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                {error}
+              </motion.div>
+            )}
 
             <motion.button
               type="submit"
               disabled={loading}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{
+                scale: 1.02,
+                boxShadow: "0 6px 25px rgba(193, 0, 0, 0.5)"
+              }}
+              whileTap={{ scale: 0.98 }}
               style={styles.submitBtn}
             >
-              {loading ? "Logging in..." : "Login as Admin"}
+              {loading ? (
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                  ⏳
+                </motion.span>
+              ) : (
+                "Sign In"
+              )}
             </motion.button>
           </motion.form>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            style={styles.backLink}
-          >
-            <a onClick={() => nav("/")} style={styles.link}>
+          <p style={styles.backLink}>
+            <span onClick={() => nav("/")} style={styles.link}>
               Back to Home
-            </a>
-          </motion.p>
+            </span>
+          </p>
         </motion.div>
       </motion.div>
     </div>
@@ -137,7 +150,6 @@ export default function AdminLogin() {
 const styles: any = {
   wrapper: {
     height: "100vh",
-    display: "flex",
     overflow: "hidden",
     position: "relative",
     color: "white",
@@ -155,32 +167,19 @@ const styles: any = {
     zIndex: 0
   },
 
-  divisionLine: {
-    width: "3px",
-    height: "100vh",
-    background: "linear-gradient(to bottom, rgba(199,0,0,0.15), rgba(199,0,0,0.2), rgba(199,0,0,0.15))",
-    backdropFilter: "blur(10px)",
-    position: "absolute",
-    left: "50%",
-    top: 0,
-    zIndex: 10,
-    transform: "translateX(-50%)",
-    transformOrigin: "top",
-    boxShadow: "0 0 20px rgba(199,0,0,0.1)"
-  },
-
   formSide: {
-    width: "50%",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: "100vw",
     height: "100vh",
-    marginLeft: "50%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "rgba(15, 23, 42, 0.2)",
-    backdropFilter: "blur(15px)",
-    padding: "20px",
-    zIndex: 5,
-    border: "1px solid rgba(255, 255, 255, 0.15)"
+    background: "rgba(10, 15, 30, 0.55)",
+    backdropFilter: "blur(30px)",
+    WebkitBackdropFilter: "blur(30px)",
+    zIndex: 5
   },
 
   formContainer: {
@@ -188,86 +187,96 @@ const styles: any = {
     flexDirection: "column",
     alignItems: "center",
     width: "100%",
-    maxWidth: "450px"
+    maxWidth: "420px",
+    padding: "0 20px"
   },
 
   title: {
-    fontSize: "2.5rem",
-    fontWeight: 700,
-    letterSpacing: "-1px",
-    marginBottom: 40,
-    fontFamily: "Google Sans Medium, sans-serif"
+    fontSize: "2.8rem",
+    fontWeight: 800,
+    marginBottom: 12,
+    background: "linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent"
+  },
+
+  subtitle: {
+    fontSize: "0.95rem",
+    color: "#a0aec0",
+    marginBottom: 35
   },
 
   form: {
     display: "flex",
     flexDirection: "column",
-    gap: 20,
+    gap: 16,
     width: "100%",
-    padding: "30px",
-    borderRadius: "14px",
-    background: "rgba(15, 23, 42, 0.5)",
-    backdropFilter: "blur(20px)",
-    border: "1px solid rgba(255, 255, 255, 0.1)"
+    padding: "40px 35px",
+    borderRadius: "16px",
+    background: "rgba(15, 23, 42, 0.4)",
+    backdropFilter: "blur(30px)",
+    WebkitBackdropFilter: "blur(30px)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)"
   },
 
   formGroup: {
     display: "flex",
     flexDirection: "column",
-    gap: 8,
-    textAlign: "left"
+    gap: 10
   },
 
   label: {
-    fontSize: "0.95rem",
-    fontWeight: 500,
-    color: "#e2e8f0"
+    fontSize: "0.85rem",
+    fontWeight: 600,
+    color: "#e2e8f0",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px"
   },
 
   input: {
-    padding: "12px 16px",
-    borderRadius: "8px",
-    border: "1px solid rgba(255, 255, 255, 0.2)",
-    background: "rgba(30, 41, 59, 0.8)",
+    padding: "14px 18px",
+    borderRadius: "10px",
+    border: "1.5px solid rgba(255, 255, 255, 0.15)",
+    background: "rgba(30, 41, 59, 0.6)",
     color: "white",
     fontSize: "1rem",
-    transition: "all 0.3s ease",
     outline: "none",
     boxSizing: "border-box" as const
   },
 
   error: {
-    color: "#ff6b6b",
-    fontSize: "0.9rem",
-    padding: "10px",
-    background: "rgba(255, 107, 107, 0.1)",
-    borderRadius: "6px",
-    border: "1px solid rgba(255, 107, 107, 0.3)"
+    color: "#ffb3ba",
+    fontSize: "0.85rem",
+    padding: "12px 14px",
+    background: "rgba(255, 107, 107, 0.12)",
+    borderRadius: "8px",
+    border: "1px solid rgba(255, 107, 107, 0.35)"
   },
 
   submitBtn: {
-    padding: "14px 28px",
-    marginTop: 10,
-    borderRadius: 8,
+    padding: "14px 32px",
+    marginTop: 8,
+    borderRadius: "10px",
     border: "none",
     background: "linear-gradient(135deg, #c20000 0%, #ff1744 100%)",
     color: "white",
-    fontSize: "1.1rem",
-    fontWeight: 600,
+    fontSize: "1rem",
+    fontWeight: 700,
     cursor: "pointer",
-    transition: "all 0.3s ease"
+    textTransform: "uppercase",
+    letterSpacing: "0.5px"
   },
 
   backLink: {
-    marginTop: 20,
-    fontSize: "0.95rem",
+    marginTop: 28,
+    fontSize: "0.9rem",
     color: "#cbd5e1"
   },
 
   link: {
-    color: "#2563eb",
-    textDecoration: "none",
+    color: "#60a5fa",
     cursor: "pointer",
-    transition: "color 0.3s ease"
+    fontWeight: 600
   }
 }

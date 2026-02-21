@@ -20,10 +20,10 @@
 * {
   box-sizing: border-box;
   transition: background 0.25s ease,
-  color 0.25s ease,
-  border 0.25s ease,
-  transform 0.2s ease,
-  box-shadow 0.25s ease;
+    color 0.25s ease,
+    border 0.25s ease,
+    transform 0.2s ease,
+    box-shadow 0.25s ease;
 }
 
 body {
@@ -40,10 +40,12 @@ body {
 ::-webkit-scrollbar {
   width: 8px;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #1f2a44;
   border-radius: 6px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #2b3a5f;
 }
@@ -57,8 +59,15 @@ body {
 }
 
 @keyframes pageFade {
-  from { opacity: 0; transform: translateY(10px);}
-  to { opacity: 1; transform: translateY(0);}
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* =========================
@@ -76,13 +85,30 @@ body {
   animation: float 18s ease-in-out infinite;
 }
 
-.blob1 { background: #2563eb; top: -120px; left: -120px; }
-.blob2 { background: #7c3aed; bottom: -120px; right: -120px; }
+.blob1 {
+  background: #2563eb;
+  top: -120px;
+  left: -120px;
+}
+
+.blob2 {
+  background: #7c3aed;
+  bottom: -120px;
+  right: -120px;
+}
 
 @keyframes float {
-  0% { transform: translate(0px, 0px); }
-  50% { transform: translate(40px, 30px); }
-  100% { transform: translate(0px, 0px); }
+  0% {
+    transform: translate(0px, 0px);
+  }
+
+  50% {
+    transform: translate(40px, 30px);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
 }
 
 /* =========================
@@ -109,19 +135,19 @@ body {
 
 .glow-blue {
   box-shadow:
-  0 0 0px rgba(59,130,246,0),
-  0 0 25px rgba(59,130,246,0.15),
-  0 0 60px rgba(59,130,246,0.05);
+    0 0 0px rgba(59, 130, 246, 0),
+    0 0 25px rgba(59, 130, 246, 0.15),
+    0 0 60px rgba(59, 130, 246, 0.05);
 }
 
 .glow-blue:hover {
   box-shadow:
-  0 0 15px rgba(59,130,246,0.35),
-  0 0 60px rgba(59,130,246,0.15);
+    0 0 15px rgba(59, 130, 246, 0.35),
+    0 0 60px rgba(59, 130, 246, 0.15);
 }
 
 .glow-danger {
-  box-shadow: 0 0 18px rgba(255,0,90,0.25);
+  box-shadow: 0 0 18px rgba(255, 0, 90, 0.25);
 }
 
 /* =========================
@@ -143,7 +169,7 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg,#2563eb,#1d4ed8);
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
   border: none;
 }
 
@@ -158,8 +184,8 @@ body {
 .card {
   padding: 18px;
   border-radius: 16px;
-  background: rgba(18,26,43,0.7);
-  border: 1px solid rgba(148,163,184,0.12);
+  background: rgba(18, 26, 43, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 /* =========================
@@ -198,4 +224,30 @@ body {
 .subtitle {
   color: var(--muted);
   margin-bottom: 20px;
+}
+
+/* =========================
+ *   LOGIN FORM ENHANCEMENTS
+ *   ========================= */
+
+/* Input focus and hover states */
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus {
+  background: rgba(30, 41, 59, 0.9) !important;
+  border: 1.5px solid rgba(96, 165, 250, 0.5) !important;
+  box-shadow: 0 0 20px rgba(96, 165, 250, 0.2) !important;
+}
+
+input[type="text"]:hover,
+input[type="password"]:hover,
+input[type="email"]:hover {
+  border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
+  background: rgba(30, 41, 59, 0.7) !important;
+}
+
+/* Button disabled state */
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
