@@ -1,7 +1,14 @@
 import { motion } from "framer-motion"
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+
+const TEMP_CREDENTIALS = {
+  username: "admin",
+  password: "admin"
+}
 
 export default function Home() {
+  const navigate = useNavigate()
   const [loginMode, setLoginMode] = useState<"landing" | "admin" | "viewer" | "register" | null>(null)
   const [adminUsername, setAdminUsername] = useState("")
   const [adminPassword, setAdminPassword] = useState("")
@@ -39,11 +46,14 @@ export default function Home() {
     setError("")
     setLoading(true)
     setTimeout(() => {
-      if (adminUsername && adminPassword) {
-        console.log("Admin login:", { adminUsername, adminPassword })
+      if (
+        adminUsername.trim() === TEMP_CREDENTIALS.username
+        && adminPassword === TEMP_CREDENTIALS.password
+      ) {
+        navigate("/admin-dashboard")
         setLoading(false)
       } else {
-        setError("Please enter username and password")
+        setError("Invalid credentials. Use admin / admin.")
         setLoading(false)
       }
     }, 1000)
@@ -54,11 +64,14 @@ export default function Home() {
     setError("")
     setLoading(true)
     setTimeout(() => {
-      if (viewerUsername && viewerPassword) {
-        console.log("Viewer login:", { viewerUsername, viewerPassword })
+      if (
+        viewerUsername.trim() === TEMP_CREDENTIALS.username
+        && viewerPassword === TEMP_CREDENTIALS.password
+      ) {
+        navigate("/viewer-dashboard")
         setLoading(false)
       } else {
-        setError("Please enter username and password")
+        setError("Invalid credentials. Use admin / admin.")
         setLoading(false)
       }
     }, 1000)
@@ -321,6 +334,10 @@ export default function Home() {
 
               {error && <div style={styles.error}>{error}</div>}
 
+              {(loginMode === "admin" || loginMode === "viewer") && (
+                <div style={styles.helperText}>Temporary login: admin / admin</div>
+              )}
+
               <motion.button
                 type="submit"
                 disabled={loading}
@@ -546,6 +563,15 @@ const styles: any = {
     background: "rgba(255, 107, 107, 0.1)",
     borderRadius: "6px",
     border: "1px solid rgba(255, 107, 107, 0.3)"
+  },
+
+  helperText: {
+    color: "#bfdbfe",
+    fontSize: "0.9rem",
+    background: "rgba(37, 99, 235, 0.12)",
+    border: "1px solid rgba(37, 99, 235, 0.35)",
+    borderRadius: "6px",
+    padding: "10px"
   },
 
   submitBtn: {
