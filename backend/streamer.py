@@ -37,6 +37,7 @@ async def frame_generator(
     scenario: str,
     line: str | None = None,
     restricted_point: str | None = None,
+    zone: str | None = None,
     video: str | None = None,
     token: str | None = None,
 ):
@@ -82,6 +83,13 @@ async def frame_generator(
         if len(parts) == 2:
             coords = list(map(int, parts))
             cfg["restricted_point"] = [coords[0], coords[1]]
+    
+    if zone is not None:
+        points = []
+        for pair in zone.split(";"):
+            x, y = map(int, pair.split(","))
+            points.append([x, y])
+        cfg["zone"] = points
 
     video_src = cfg["video"]
     # if video_src is a relative filesystem path, make it absolute with PROJECT_ROOT
@@ -136,7 +144,7 @@ async def frame_generator(
 
     for frame in gen:
         # break loop if client disconnected
-        if await request.is_disconnected():
+        if await await_request_disconnected(request):
             print("[INFO] client disconnected, stopping generator")
             break
         # break if frontend explicitly asked us to stop the stream
