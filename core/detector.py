@@ -4,30 +4,34 @@ from ultralytics import YOLO
 from collections import defaultdict, deque
 import math
 import torch
+import numpy as np
 
 
 def run_behavior(video_path, cfg, stream=False):
 
-    CONFIDENCE = cfg.get("confidence", 0.01)
+    CONFIDENCE  = cfg.get("confidence", 0.35)
     INFER_WIDTH = 640
 
-    MIN_RUNNING_SPEED = cfg.get("min_running_speed", 120)
-    MIN_ACCELERATION = cfg.get("min_acceleration", 120)
-    MIN_DISTANCE = cfg.get("min_distance", 100)
+    # Speed in body-lengths/second (displacement / box_height).
+    # Camera-invariant: works regardless of zoom, distance, resolution.
+    #   Walking  : ~0.8 – 1.8  bl/s
+    #   Jogging  : ~2.0 – 3.0  bl/s
+    #   Running  : ~3.0 – 6.0  bl/s
+    MIN_RUNNING_SPEED = cfg.get("min_running_speed", 2.5)
+    MIN_DISTANCE_BL   = cfg.get("min_distance", 2.0)
 
-    LOITER_TIME = cfg.get("loiter_time", 8)
-    LOITER_RADIUS = cfg.get("loiter_radius", 60)
+    LOITER_TIME   = cfg.get("loiter_time", 10)
+    LOITER_RADIUS = cfg.get("loiter_radius", 0.6)
 
-    POSSIBLE_FRAMES = 4
-    EMA_ALPHA = 0.4
+    CONFIRM_FRAMES = 12
+    EMA_ALPHA      = 0.15
 
     IDLE, POSSIBLE, RUNNING = 0, 1, 2
 
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[INFO] Using device: {DEVICE}")
 
-    model = YOLO("yolov8n")
-
+    model = YOLO("yolov8s")
     try:
         model.fuse()
     except Exception:
@@ -40,49 +44,70 @@ def run_behavior(video_path, cfg, stream=False):
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     fps = fps if fps > 0 else 25
-    frame_time = 1.0 / fps
+    frame_time = 1.0 / fps   # same variable name as line_crossing
 
-    # TRACKING DATA
-    track_history = defaultdict(lambda: deque(maxlen=int(fps * 15)))
-    ema_speed = defaultdict(float)
-    prev_ema_speed = defaultdict(float)
-    ema_accel = defaultdict(float)
-    distance_window = defaultdict(float)
+    print(f"[INFO] Video FPS: {fps:.1f}  target frame_time: {frame_time*1000:.1f} ms")
 
-    # STATES
-    state = defaultdict(lambda: IDLE)
+    # video_spf used ONLY for speed math — constant, never wall-clock
+    video_spf = 1.0 / fps
+
+    # ── TRACKING DATA ─────────────────────────────────────────────────────────
+    track_history   = defaultdict(lambda: deque(maxlen=int(fps * 15)))
+    ema_speed_norm  = defaultdict(float)
+    prev_speed_norm = defaultdict(float)
+    distance_bl     = defaultdict(float)
+
+    state         = defaultdict(lambda: IDLE)
     state_counter = defaultdict(int)
 
-    # LOITERING DATA
-    loiter_start_time = defaultdict(lambda: None)
-    is_loitering = defaultdict(lambda: False)
+    loiter_start_frame = defaultdict(lambda: None)
+    is_loitering       = defaultdict(lambda: False)
+    frame_count        = 0
 
     def check_loitering(tid):
-        history = track_history[tid]
-        if len(history) < fps * LOITER_TIME:
+        history  = track_history[tid]
+        required = int(fps * LOITER_TIME)
+        if len(history) < required:
             return False
+        points  = list(history)[-required:]
+        avg_h   = max(1, np.mean([p[2] for p in points]))
+        xs      = [p[0] for p in points]
+        ys      = [p[1] for p in points]
+        dx      = (max(xs) - min(xs)) / avg_h
+        dy      = (max(ys) - min(ys)) / avg_h
+        return math.sqrt(dx*dx + dy*dy) < LOITER_RADIUS
 
-        points = list(history)[-int(fps * LOITER_TIME):]
-        xs = [p[0] for p in points]
-        ys = [p[1] for p in points]
+    # ── PLAYBACK CLOCK — identical structure to line_crossing.py ─────────────
+    playback_start_wall  = time.perf_counter()
+    playback_start_frame = 0
 
-        dx = max(xs) - min(xs)
-        dy = max(ys) - min(ys)
-        movement = math.sqrt(dx*dx + dy*dy)
-
-        return movement < LOITER_RADIUS
-
+    # ── MAIN LOOP ──────────────────────────────────────────────────────────────
     while True:
+        frame_count += 1
 
-        start = time.time()
         ret, frame = cap.read()
-
         if not ret:
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            # reset clock on loop — identical to line_crossing
+            playback_start_wall  = time.perf_counter()
+            playback_start_frame = frame_count
             continue
 
-        h, w = frame.shape[:2]
-        scale = INFER_WIDTH / w
+        # ── FPS LOCK — copy-pasted from line_crossing.py ──────────────────────
+        frames_since_start = frame_count - playback_start_frame
+        target_wall_time   = playback_start_wall + frames_since_start * frame_time
+        now                = time.perf_counter()
+        sleep_needed       = target_wall_time - now
+
+        if sleep_needed > 0:
+            time.sleep(sleep_needed)
+        elif sleep_needed < -(frame_time * 2):
+            cap.grab()
+            frame_count += 1
+
+        # ── INFERENCE ─────────────────────────────────────────────────────────
+        h, w        = frame.shape[:2]
+        scale       = INFER_WIDTH / w
         infer_frame = cv2.resize(frame, (INFER_WIDTH, int(h * scale)))
 
         results = model.track(
@@ -91,7 +116,8 @@ def run_behavior(video_path, cfg, stream=False):
             classes=[0],
             conf=CONFIDENCE,
             device=DEVICE,
-            imgsz=INFER_WIDTH
+            imgsz=INFER_WIDTH,
+            verbose=False,
         )
 
         for r in results:
@@ -99,101 +125,94 @@ def run_behavior(video_path, cfg, stream=False):
                 continue
 
             for box, tid in zip(r.boxes.xyxy, r.boxes.id):
-
                 x1, y1, x2, y2 = map(int, box)
-                x1, y1 = int(x1/scale), int(y1/scale)
-                x2, y2 = int(x2/scale), int(y2/scale)
+                x1 = int(x1 / scale);  x2 = int(x2 / scale)
+                y1 = int(y1 / scale);  y2 = int(y2 / scale)
 
-                tid = int(tid)
-                cx, cy = (x1+x2)//2, (y1+y2)//2
+                tid   = int(tid)
+                cx    = (x1 + x2) // 2
+                cy    = y2
+                box_h = max(1, y2 - y1)
 
-                track_history[tid].append((cx, cy))
+                track_history[tid].append((cx, cy, box_h))
 
-                # SPEED CALCULATION
-                speed = 0
+                # ── NORMALISED SPEED (body-lengths/s) ─────────────────────────
+                speed_norm = 0.0
                 if len(track_history[tid]) >= 2:
-                    px, py = track_history[tid][-2]
-                    dist = math.hypot(cx-px, cy-py)
-                    speed = dist / frame_time
-                    distance_window[tid] += dist
+                    px, py, ph = track_history[tid][-2]
+                    pixel_dist = math.hypot(cx - px, cy - py)
+                    avg_h      = max(1, (box_h + ph) / 2.0)
+                    speed_norm = (pixel_dist / avg_h) / video_spf
+                    distance_bl[tid] += pixel_dist / avg_h
 
-                    prev_ema_speed[tid] = ema_speed[tid]
-                    ema_speed[tid] = EMA_ALPHA*speed + (1-EMA_ALPHA)*ema_speed[tid]
+                    prev_speed_norm[tid] = ema_speed_norm[tid]
+                    ema_speed_norm[tid]  = (
+                        EMA_ALPHA * speed_norm
+                        + (1.0 - EMA_ALPHA) * ema_speed_norm[tid]
+                    )
 
-                accel = abs(ema_speed[tid]-prev_ema_speed[tid]) / frame_time
-                ema_accel[tid] = EMA_ALPHA*accel + (1-EMA_ALPHA)*ema_accel[tid]
+                s = ema_speed_norm[tid]
 
-                # RUNNING DETECTION
-                if state[tid] == IDLE and ema_speed[tid] > MIN_RUNNING_SPEED:
-                    state[tid] = POSSIBLE
-                    state_counter[tid] = 1
-                    distance_window[tid] = 0
+                # ── RUNNING STATE MACHINE ──────────────────────────────────────
+                if state[tid] == IDLE:
+                    if s > MIN_RUNNING_SPEED:
+                        state[tid]         = POSSIBLE
+                        state_counter[tid] = 1
+                        distance_bl[tid]   = 0.0
 
                 elif state[tid] == POSSIBLE:
-                    if ema_speed[tid] > MIN_RUNNING_SPEED and ema_accel[tid] > MIN_ACCELERATION:
+                    if s > MIN_RUNNING_SPEED:
                         state_counter[tid] += 1
                     else:
-                        state[tid] = IDLE
+                        state[tid]         = IDLE
                         state_counter[tid] = 0
-                        distance_window[tid] = 0
+                        distance_bl[tid]   = 0.0
 
-                    if state_counter[tid] >= POSSIBLE_FRAMES and distance_window[tid] >= MIN_DISTANCE:
+                    if (
+                        state_counter[tid] >= CONFIRM_FRAMES
+                        and distance_bl[tid] >= MIN_DISTANCE_BL
+                    ):
                         state[tid] = RUNNING
 
-                elif state[tid] == RUNNING and ema_speed[tid] < MIN_RUNNING_SPEED*0.6:
-                    state[tid] = IDLE
-                    state_counter[tid] = 0
-                    distance_window[tid] = 0
+                elif state[tid] == RUNNING:
+                    if s < MIN_RUNNING_SPEED * 0.55:
+                        state[tid]         = IDLE
+                        state_counter[tid] = 0
+                        distance_bl[tid]   = 0.0
 
-                is_running = state[tid] == RUNNING
+                is_running = (state[tid] == RUNNING)
 
-                # LOITERING DETECTION
+                # ── LOITERING ─────────────────────────────────────────────────
                 if check_loitering(tid):
-                    if loiter_start_time[tid] is None:
-                        loiter_start_time[tid] = time.time()
-
-                    if time.time() - loiter_start_time[tid] > LOITER_TIME:
+                    if loiter_start_frame[tid] is None:
+                        loiter_start_frame[tid] = frame_count
+                    if (frame_count - loiter_start_frame[tid]) > fps * LOITER_TIME:
                         is_loitering[tid] = True
                 else:
-                    loiter_start_time[tid] = None
-                    is_loitering[tid] = False
+                    loiter_start_frame[tid] = None
+                    is_loitering[tid]       = False
 
-                # LABELS
-                label = f"ID {tid}"
-                color = (0,255,0)
+                # ── DRAW ──────────────────────────────────────────────────────
+                label = f"ID {tid}  {s:.1f} bl/s"
+                color = (0, 255, 0)
 
                 if is_running:
-                    label = "RUNNING"
-                    color = (0,0,255)
-
+                    label = f"RUNNING  {s:.1f} bl/s"
+                    color = (0, 0, 255)
                 elif is_loitering[tid]:
                     label = "LOITERING"
-                    color = (255,0,0)
+                    color = (255, 0, 0)
 
-                cv2.rectangle(frame,(x1,y1),(x2,y2),color,2)
-                cv2.putText(frame,label,(x1,y1-10),
-                            cv2.FONT_HERSHEY_SIMPLEX,0.7,color,2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(
+                    frame, label, (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2,
+                )
 
         if stream:
             yield frame
-            # throttle output to roughly match original video FPS…
-            elapsed = time.time() - start
-            if elapsed < frame_time:
-                time.sleep(frame_time - elapsed)
-            else:
-                # if we're consistently behind schedule, drop next frame
-                cap.grab()
         else:
             cv2.imshow("Behavior Monitoring", frame)
-
-            delay = frame_time - (time.time()-start)
-            if delay > 0:
-                time.sleep(delay)
-            elif delay < -frame_time * 0.5:
-                # non-stream mode: if we're more than half a frame late, skip
-                # one to avoid accumulating latency when showing the window
-                cap.grab()
-
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
