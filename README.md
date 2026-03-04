@@ -1,6 +1,4 @@
-````markdown
 # 🛰️ Smart Surveillance System (YOLOv8 + FastAPI + React)
-
 AI-powered real-time surveillance system capable of monitoring live cameras and detecting suspicious activities.
 
 Supports **Windows, Linux and MacOS**  
@@ -24,7 +22,9 @@ Automatically uses **CPU or NVIDIA GPU (CUDA)**.
 
 # 🧠 System Architecture
 
+```
 Camera → Scenario → Detector → Stream → Browser UI
+```
 
 ### Backend
 - **FastAPI**
@@ -47,18 +47,18 @@ MJPEG HTTP stream (no plugins required)
 
 Install the following software:
 
-| Software | Version |
-|--------|--------|
-Python | 3.10+ |
-Node.js | 18+ |
-PostgreSQL | 14+ |
-Git | Latest |
+| Software   | Version |
+|------------|---------|
+| Python     | 3.10+   |
+| Node.js    | 18+     |
+| PostgreSQL | 14+     |
+| Git        | Latest  |
 
 Optional:
 
-| Hardware | Support |
-|--------|--------|
-NVIDIA GPU | CUDA 11+ |
+| Hardware   | Support  |
+|------------|----------|
+| NVIDIA GPU | CUDA 11+ |
 
 ---
 
@@ -69,7 +69,7 @@ NVIDIA GPU | CUDA 11+ |
 ```bash
 git clone https://github.com/Abhiram086/smart_surveillance.git
 cd smart_surveillance
-````
+```
 
 ---
 
@@ -78,14 +78,12 @@ cd smart_surveillance
 ## 2️⃣ Create Python Virtual Environment
 
 ### Windows
-
 ```bash
 python -m venv venv
 venv\Scripts\activate
 ```
 
 ### Linux / Mac
-
 ```bash
 python -m venv venv
 source venv/bin/activate
@@ -100,7 +98,6 @@ pip install -r requirements.txt
 ```
 
 On first run the system automatically downloads:
-
 ```
 YOLOv8n model (~6MB)
 ```
@@ -115,12 +112,10 @@ The system uses **PostgreSQL for user authentication**.
 
 ## 1️⃣ Install PostgreSQL
 
-Download:
-
+Download:  
 [https://www.postgresql.org/download/](https://www.postgresql.org/download/)
 
 During installation remember the password for:
-
 ```
 postgres
 ```
@@ -130,36 +125,29 @@ postgres
 ## 2️⃣ Create Database
 
 Open terminal or command prompt:
-
 ```bash
 psql -U postgres
 ```
 
 Run the following:
-
 ```sql
 CREATE DATABASE surveillance;
-
 CREATE USER surveillance_user WITH PASSWORD 'surveillance_pass';
-
 GRANT ALL PRIVILEGES ON DATABASE surveillance TO surveillance_user;
 ```
 
 Connect to the database:
-
 ```sql
 \c surveillance
 ```
 
 Grant schema permissions:
-
 ```sql
 GRANT ALL ON SCHEMA public TO surveillance_user;
 ALTER SCHEMA public OWNER TO surveillance_user;
 ```
 
 Exit:
-
 ```sql
 \q
 ```
@@ -169,13 +157,11 @@ Exit:
 ## 3️⃣ Configure Environment Variables
 
 Create file:
-
 ```
 backend/.env
 ```
 
 Add:
-
 ```
 DATABASE_URL=postgresql://surveillance_user:surveillance_pass@localhost:5432/surveillance
 ```
@@ -185,27 +171,24 @@ DATABASE_URL=postgresql://surveillance_user:surveillance_pass@localhost:5432/sur
 ## 4️⃣ Initialize Database Tables
 
 From backend folder:
-
 ```bash
 cd backend
 python -m db.init_db
 ```
 
 This creates the table:
-
 ```
 users
 ```
 
 Schema:
-
 ```
 users
-├── id SERIAL PRIMARY KEY
-├── username TEXT UNIQUE
+├── id           SERIAL PRIMARY KEY
+├── username     TEXT UNIQUE
 ├── password_hash TEXT
-├── role TEXT
-└── created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+├── role         TEXT
+└── created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ```
 
 ---
@@ -241,7 +224,6 @@ uvicorn app:app --reload --port 8000
 ```
 
 Backend runs at:
-
 ```
 http://127.0.0.1:8000
 ```
@@ -256,7 +238,6 @@ npm run dev
 ```
 
 Open browser:
-
 ```
 http://localhost:5173
 ```
@@ -270,7 +251,6 @@ You should now see the surveillance dashboard 🎥
 Users can register directly from the UI.
 
 Roles supported:
-
 ```
 admin
 viewer
@@ -285,19 +265,16 @@ Credentials are stored securely using **bcrypt hashing** in PostgreSQL.
 You can run detectors via CLI.
 
 ### Line Crossing
-
 ```bash
 python main.py config/metro_line.json
 ```
 
 ### Restricted Zone
-
 ```bash
 python main.py config/restricted_zone.json
 ```
 
 ### Behavior Detection
-
 ```bash
 python main.py config/behavior.json
 ```
@@ -309,15 +286,11 @@ Press **Q** to exit window.
 # 📹 Using Your Own Video
 
 Place videos inside:
-
 ```
 videos/
 ```
 
-Edit config file:
-
-Example:
-
+Edit config file. Example:
 ```
 "video": "videos/myvideo.mp4"
 ```
@@ -327,13 +300,11 @@ Example:
 # 🖥️ Using Webcam
 
 Use:
-
 ```
 "video": 0
 ```
 
 Example:
-
 ```json
 {
   "scenario": "BEHAVIOR",
@@ -349,7 +320,7 @@ The system automatically detects CUDA.
 
 ```
 CUDA available → GPU used
-No CUDA → CPU used
+No CUDA        → CPU used
 ```
 
 No configuration required.
@@ -361,14 +332,14 @@ No configuration required.
 ```
 smart_surveillance/
 │
-├── backend/        FastAPI backend + API routes
-├── core/           Detection engines
-├── scenarios/      Scenario logic
-├── config/         Scenario configuration files
-├── frontend/       React dashboard
-├── videos/         Sample videos
-├── db/             Database initialization
-├── main.py         CLI detection runner
+├── backend/          FastAPI backend + API routes
+├── core/             Detection engines
+├── scenarios/        Scenario logic
+├── config/           Scenario configuration files
+├── frontend/         React dashboard
+├── videos/           Sample videos
+├── db/               Database initialization
+├── main.py           CLI detection runner
 └── requirements.txt
 ```
 
@@ -377,29 +348,27 @@ smart_surveillance/
 # 🧪 Tested Platforms
 
 | OS                  | Status |
-| ------------------- | ------ |
-| Windows 10/11       | ✅      |
-| Ubuntu / Arch Linux | ✅      |
-| MacOS               | ✅      |
-| NVIDIA GPU          | ✅      |
-| CPU Only            | ✅      |
+|---------------------|--------|
+| Windows 10/11       | ✅     |
+| Ubuntu / Arch Linux | ✅     |
+| MacOS               | ✅     |
+| NVIDIA GPU          | ✅     |
+| CPU Only            | ✅     |
 
 ---
 
 # ⚠️ Known Limitations (WIP)
 
-* Multi-camera support coming soon
-* Config drawing UI not implemented
-* Alert notifications not implemented
+- Multi-camera support coming soon
+- Config drawing UI not implemented
+- Alert notifications not implemented
 
 ---
 
 # 🛠️ Troubleshooting
 
 ## Webcam not opening
-
 Close applications using camera:
-
 ```
 Zoom
 Teams
@@ -409,9 +378,7 @@ Browser tabs
 ---
 
 ## Port already in use
-
 Change backend port:
-
 ```bash
 uvicorn app:app --reload --port 8001
 ```
@@ -419,7 +386,6 @@ uvicorn app:app --reload --port 8001
 ---
 
 ## Model downloads every run
-
 Ensure internet connection on first run.
 
 ---
@@ -433,6 +399,3 @@ Educational Mini Project
 # 👨‍💻 Author
 
 Abhiram S
-
-```
-```
