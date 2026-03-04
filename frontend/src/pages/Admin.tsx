@@ -76,7 +76,7 @@ export default function Admin() {
       // ask backend to kill the stream (token may be null if something went awry)
       if (streamToken) {
         fetch(`http://127.0.0.1:8000/stop?token=${streamToken}`, { method: "POST" })
-          .catch(() => {});
+        .catch(() => {});
         setStreamToken(null);
       }
 
@@ -87,7 +87,7 @@ export default function Admin() {
       let updatedList = cameras;
       if (savedCamera && activeScenarioCamId) {
         updatedList = cameras.map(c =>
-          c.id === activeScenarioCamId ? savedCamera : c
+        c.id === activeScenarioCamId ? savedCamera : c
         );
         setCameras(updatedList);
       }
@@ -142,9 +142,9 @@ export default function Admin() {
             const data = await resp.json();
             videoParam = data.location;
             setCameras(prev =>
-              prev.map(c =>
-                c.id === cam.id ? { ...c, serverSource: videoParam } : c
-              )
+            prev.map(c =>
+            c.id === cam.id ? { ...c, serverSource: videoParam } : c
+            )
             );
           } catch (err) {
             console.error("failed to upload blob video", err);
@@ -313,9 +313,9 @@ export default function Admin() {
   const renderCameraFeed = (camera: Camera) => {
     // common click handler and cursor style
     const isInteractive =
-      scenario === "metro_line" &&
-      selectedCamera === camera.id &&
-      camera.id !== activeScenarioCamId;
+    scenario === "metro_line" &&
+    selectedCamera === camera.id &&
+    camera.id !== activeScenarioCamId;
 
     const baseCursor = isInteractive ? "crosshair" : "default";
 
@@ -340,15 +340,15 @@ export default function Admin() {
       if (drawingLine && isInteractive) {
         wrapped = (
           <div style={{ position: "relative" }}>
-            {content}
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                cursor: "crosshair",
-              }}
-              onClick={(e) => handleVideoClick(e as any, camera)}
-            />
+          {content}
+          <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            cursor: "crosshair",
+          }}
+          onClick={(e) => handleVideoClick(e as any, camera)}
+          />
           </div>
         );
       }
@@ -358,39 +358,39 @@ export default function Admin() {
         const makePct = (val: number, dim: number) => (val / dim) * 100;
         const points = linePoints.map(p => ({
           x: makePct(p.x, dims.w),
-          y: makePct(p.y, dims.h),
+                                            y: makePct(p.y, dims.h),
         }));
         const restrictedPct = restrictedPoint
-          ? { x: makePct(restrictedPoint.x, dims.w), y: makePct(restrictedPoint.y, dims.h) }
-          : null;
+        ? { x: makePct(restrictedPoint.x, dims.w), y: makePct(restrictedPoint.y, dims.h) }
+        : null;
 
         wrapped = (
           <div style={{ position: "relative", width: "100%", height: "100%" }}>
-            {wrapped}
-            <svg
-              style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
-            >
-              {points.length >= 2 && (
-                <line
-                  x1={`${points[0].x}%`} y1={`${points[0].y}%`}
-                  x2={`${points[1].x}%`} y2={`${points[1].y}%`}
-                  stroke="#f59e0b" strokeWidth="2"
-                />
-              )}
-              {points.map((p, i) => (
-                <circle
-                  key={i}
-                  cx={`${p.x}%`} cy={`${p.y}%`}
-                  r="3" fill="#f59e0b"
-                />
-              ))}
-              {restrictedPct && (
-                <circle
-                  cx={`${restrictedPct.x}%`} cy={`${restrictedPct.y}%`}
-                  r="5" fill="#ef4444"
-                />
-              )}
-            </svg>
+          {wrapped}
+          <svg
+          style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+          >
+          {points.length >= 2 && (
+            <line
+            x1={`${points[0].x}%`} y1={`${points[0].y}%`}
+            x2={`${points[1].x}%`} y2={`${points[1].y}%`}
+            stroke="#f59e0b" strokeWidth="2"
+            />
+          )}
+          {points.map((p, i) => (
+            <circle
+            key={i}
+            cx={`${p.x}%`} cy={`${p.y}%`}
+            r="3" fill="#f59e0b"
+            />
+          ))}
+          {restrictedPct && (
+            <circle
+            cx={`${restrictedPct.x}%`} cy={`${restrictedPct.y}%`}
+            r="5" fill="#ef4444"
+            />
+          )}
+          </svg>
           </div>
         );
       }
@@ -407,42 +407,42 @@ export default function Admin() {
       const status = streamStatus[camera.id];
       return withOverlay(
         <div style={wrapperStyle}>
-          {!videoReady && (
-            <div style={{...styles.overlay, visibility: "visible"}}>
-              Loading video…
-            </div>
-          )}
-          {status === "connecting" && (
-            <div style={styles.overlay}>Connecting…</div>
-          )}
-          {status === "error" && (
-            <div style={styles.overlay}>Stream error – check console/server log</div>
-          )}
-          <img
-            key={camera.id}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "contain",
-              cursor: baseCursor,
-            }}
-            src={camera.source}
-            onLoad={(e) => {
-              const img = e.currentTarget as HTMLImageElement;
-              if (img.naturalWidth && img.naturalHeight) {
-                setAspectRatios(prev => ({
-                  ...prev,
-                  [camera.id]: img.naturalWidth / img.naturalHeight,
-                }));
-                setVideoDims(prev => ({
-                  ...prev,
-                  [camera.id]: { w: img.naturalWidth, h: img.naturalHeight },
-                }));
-              }
-              setStreamStatus(prev => ({ ...prev, [camera.id]: "ok" }));
-            }}
-            onError={() => setStreamStatus(prev => ({ ...prev, [camera.id]: "error" }))}
-          />
+        {!videoReady && (
+          <div style={{...styles.overlay, visibility: "visible"}}>
+          Loading video…
+          </div>
+        )}
+        {status === "connecting" && (
+          <div style={styles.overlay}>Connecting…</div>
+        )}
+        {status === "error" && (
+          <div style={styles.overlay}>Stream error – check console/server log</div>
+        )}
+        <img
+        key={camera.id}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+          cursor: baseCursor,
+        }}
+        src={camera.source}
+        onLoad={(e) => {
+          const img = e.currentTarget as HTMLImageElement;
+          if (img.naturalWidth && img.naturalHeight) {
+            setAspectRatios(prev => ({
+              ...prev,
+              [camera.id]: img.naturalWidth / img.naturalHeight,
+            }));
+            setVideoDims(prev => ({
+              ...prev,
+              [camera.id]: { w: img.naturalWidth, h: img.naturalHeight },
+            }));
+          }
+          setStreamStatus(prev => ({ ...prev, [camera.id]: "ok" }));
+        }}
+        onError={() => setStreamStatus(prev => ({ ...prev, [camera.id]: "error" }))}
+        />
         </div>
       );
     }
@@ -451,27 +451,27 @@ export default function Admin() {
     if (camera.type === "ip" && camera.source.startsWith("http")) {
       return withOverlay(
         <div style={wrapperStyle}>
-          <video
-            key={camera.id}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "contain",
-            }}
-            controls={!drawingLine}
-            autoPlay
-            muted
-            src={camera.source}
-            onLoadedMetadata={(e) => {
-              const vid = e.currentTarget as HTMLVideoElement;
-              if (vid.videoWidth && vid.videoHeight) {
-                setAspectRatios(prev => ({
-                  ...prev,
-                  [camera.id]: vid.videoWidth / vid.videoHeight,
-                }));
-              }
-            }}
-          />
+        <video
+        key={camera.id}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+        }}
+        controls={!drawingLine}
+        autoPlay
+        muted
+        src={camera.source}
+        onLoadedMetadata={(e) => {
+          const vid = e.currentTarget as HTMLVideoElement;
+          if (vid.videoWidth && vid.videoHeight) {
+            setAspectRatios(prev => ({
+              ...prev,
+              [camera.id]: vid.videoWidth / vid.videoHeight,
+            }));
+          }
+        }}
+        />
         </div>
       );
     }
@@ -479,8 +479,8 @@ export default function Admin() {
     if (camera.type === "webcam") {
       return (
         <div style={styles.cameraFeedContent} {...clickProps}>
-          <div style={{ fontSize: "24px", marginBottom: "10px" }}>🎥</div>
-          <p style={styles.cameraStatus}>{camera.source}</p>
+        <div style={{ fontSize: "24px", marginBottom: "10px" }}>🎥</div>
+        <p style={styles.cameraStatus}>{camera.source}</p>
         </div>
       );
     }
@@ -488,385 +488,385 @@ export default function Admin() {
     if (camera.type === "file") {
       return withOverlay(
         <div style={wrapperStyle}>
-          {!videoReady && (
-            <div style={{...styles.overlay, visibility: "visible"}}>
-              Loading video…
-            </div>
-          )}
-          <video
-            key={camera.id}
-            data-cam-id={camera.id}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "contain",
-            }}
-            controls={!drawingLine}
-            autoPlay={!drawingLine}
-            loop
-            src={camera.source}
-            onLoadedMetadata={(e) => {
-              const vid = e.currentTarget as HTMLVideoElement;
-              if (vid.videoWidth && vid.videoHeight) {
-                setAspectRatios(prev => ({
-                  ...prev,
-                  [camera.id]: vid.videoWidth / vid.videoHeight,
-                }));
-                setVideoDims(prev => ({
-                  ...prev,
-                  [camera.id]: { w: vid.videoWidth, h: vid.videoHeight },
-                }));
-              }
-            }}
-          />
+        {!videoReady && (
+          <div style={{...styles.overlay, visibility: "visible"}}>
+          Loading video…
+          </div>
+        )}
+        <video
+        key={camera.id}
+        data-cam-id={camera.id}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+        }}
+        controls={!drawingLine}
+        autoPlay={!drawingLine}
+        loop
+        src={camera.source}
+        onLoadedMetadata={(e) => {
+          const vid = e.currentTarget as HTMLVideoElement;
+          if (vid.videoWidth && vid.videoHeight) {
+            setAspectRatios(prev => ({
+              ...prev,
+              [camera.id]: vid.videoWidth / vid.videoHeight,
+            }));
+            setVideoDims(prev => ({
+              ...prev,
+              [camera.id]: { w: vid.videoWidth, h: vid.videoHeight },
+            }));
+          }
+        }}
+        />
         </div>
       );
     }
     return withOverlay(
       <div style={styles.cameraFeedContent}>
-        <div style={styles.cameraIcon}>📹</div>
-        <p style={styles.cameraStatus}>{camera.status}</p>
+      <div style={styles.cameraIcon}>📹</div>
+      <p style={styles.cameraStatus}>{camera.status}</p>
       </div>
     );
   };
 
   return (
     <div style={styles.page}>
-      {/* HEADER */}
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>Smart Surveillance System</h1>
-          <p style={styles.subtitle}>Real-time video analysis and event detection</p>
+    {/* HEADER */}
+    <div style={styles.header}>
+    <div>
+    <h1 style={styles.title}>Smart Surveillance System</h1>
+    <p style={styles.subtitle}>Real-time video analysis and event detection</p>
+    </div>
+    <div style={styles.badge}>Inactive</div>
+    </div>
+
+    {/* MONITOR ZONES SECTION */}
+    <div style={styles.monitorZonesSection}>
+    <div style={styles.sectionTitle}>📍 Monitor Zones</div>
+    <p style={styles.emptyText}>No zones defined</p>
+    </div>
+
+    {/* MAIN GRID */}
+    <div style={styles.mainGrid}>
+    {/* LEFT VIDEO PANEL */}
+    <div style={styles.videoPanel}>
+    <div style={styles.videoPanelHeader}>
+    <div style={styles.panelTitle}>📷 Video Feed</div>
+    <div style={styles.videoControls}>
+    <select
+    style={styles.select}
+    value={selectedCamera || ""}
+    onChange={(e) => setSelectedCamera(e.target.value || null)}
+    >
+    <option value="">Select Camera</option>
+    {cameras.map(cam => (
+      <option key={cam.id} value={cam.id}>{cam.name}</option>
+    ))}
+    </select>
+    <button style={styles.noCamera}>No Camera</button>
+    </div>
+    </div>
+
+    {cameras.length === 0 ? (
+      <div style={styles.viewer}>
+      <div style={styles.viewerPlaceholder}>
+      <div style={styles.cameraIcon}>📹</div>
+      <p style={styles.placeholderText}>Select Camera or Video</p>
+      <p style={styles.placeholderSubtext}>Choose a camera or upload a video to begin</p>
+      </div>
+      </div>
+    ) : (
+      <div style={{ ...styles.cameraGrid, gridTemplateColumns: `repeat(${getGridCols()}, 1fr)` }}>
+      {cameras.map(cam => (
+        <div
+        key={cam.id}
+        style={{
+          ...styles.cameraFeed,
+          border: selectedCamera === cam.id ? "2px solid #06b6d4" : "1px solid #1f2937"
+        }}
+        onClick={() => setSelectedCamera(cam.id)}
+        >
+        <div style={styles.cameraFeedHeader}>
+        <span style={styles.cameraName}>{cam.name}</span>
+        <button
+        style={styles.removeButton}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleRemoveCamera(cam.id);
+        }}
+        >
+        ✕
+        </button>
         </div>
-        <div style={styles.badge}>Inactive</div>
+        {renderCameraFeed(cam)}
+        </div>
+      ))}
+      </div>
+    )}
+    </div>
+
+    {/* RIGHT CONTROL PANEL */}
+    <div style={styles.controlPanel}>
+    <div style={styles.panelTitle}>⚙ Control Panel</div>
+
+    {/* Select Scenario */}
+    <div style={styles.controlSection}>
+    <label style={styles.label}>Select Scenario</label>
+    <select
+    style={styles.scenarioSelect}
+    value={scenario || ""}
+    onChange={(e) => {
+      setScenario(e.target.value || null);
+      // reset any previous line configuration when scenario changes
+      setLinePoints([]);
+      setRestrictedPoint(null);
+    }}
+    >
+    <option value="">Choose a scenario</option>
+    <option value="behavior">Behavior Detection</option>
+    <option value="metro_line">Line Crossing</option>
+    </select>
+    </div>
+
+    {/* scenario-specific configuration */}
+    {scenario === "metro_line" && (
+      <div style={styles.controlSection}>
+      <p style={{ margin: "8px 0", fontSize: 14 }}>
+      {drawingLine
+        ? "Click two points to draw the line, then a third point for the restricted side."
+        : "Press the button below to start defining the line on the selected camera feed."}
+        </p>
+        <button
+        style={styles.smallButton}
+        onClick={() => {
+          setDrawingLine(!drawingLine);
+          if (!drawingLine) {
+            // starting new drawing – clear previous
+            setLinePoints([]);
+            setRestrictedPoint(null);
+          }
+        }}
+        disabled={!videoReady}
+        >
+        {drawingLine ? "Cancel Draw" : "Draw Line"}
+        </button>
+        {!videoReady && (
+          <p style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>
+          Wait for video to load before drawing
+          </p>
+        )}
+        <p style={{ margin: "4px 0", fontSize: 12, color: "#9ca3af" }}>
+        Line points: {linePoints.map(p => `(${p.x},${p.y})`).join(" → ")}
+        </p>
+        <p style={{ margin: "4px 0", fontSize: 12, color: "#9ca3af" }}>
+        Restricted pt: {restrictedPoint ? `(${restrictedPoint.x},${restrictedPoint.y})` : "(none)"}
+        </p>
+        </div>
+    )}
+
+    {/* Start/Stop Button */}
+    <button style={styles.startButton} onClick={handleStartScenario}>
+    {status === "Running" ? "■ Stop" : "▶ Start"}
+    </button>
+
+    {/* Draw Zone Button */}
+    <button style={styles.drawZoneButton}>
+    ✏ Draw New Zone
+    </button>
+
+    {/* Status Info */}
+    <div style={styles.statusBox}>
+    <div style={styles.statusRow}>
+    <span style={styles.statusLabel}>Status:</span>
+    <span style={styles.statusValue}>{status}</span>
+    </div>
+    <div style={styles.statusRow}>
+    <span style={styles.statusLabel}>Active Scenario:</span>
+    <span style={styles.statusValue}>{scenario ? scenario.charAt(0).toUpperCase() + scenario.slice(1) : "None"}</span>
+    </div>
+    <div style={styles.statusRow}>
+    <span style={styles.statusLabel}>Active Zones:</span>
+    <span style={styles.statusValue}>{activeZones}</span>
+    </div>
+    <div style={styles.statusRow}>
+    <span style={styles.statusLabel}>Total Events:</span>
+    <span style={styles.statusValue}>{totalEvents}</span>
+    </div>
+    <div style={styles.statusRow}>
+    <span style={styles.statusLabel}>Active Alerts:</span>
+    <span style={{ ...styles.statusValue, color: "#ef4444" }}>{activeAlerts}</span>
+    </div>
+    </div>
+    </div>
+
+    {/* THRESHOLD SETTINGS */}
+    <div style={styles.thresholdSection}>
+    <div style={styles.panelTitle}>📊 Threshold Settings</div>
+
+    <div style={styles.thresholdControl}>
+    <label style={styles.thresholdLabel}>Running Threshold</label>
+    <div style={styles.sliderContainer}>
+    <input
+    type="range"
+    min="0.5"
+    max="3"
+    step="0.1"
+    value={runningThreshold}
+    onChange={(e) => setRunningThreshold(parseFloat(e.target.value))}
+    style={styles.slider}
+    />
+    <span style={styles.thresholdValue}>{runningThreshold.toFixed(1)}x</span>
+    </div>
+    <p style={styles.thresholdDescription}>Speed multiplier to detect running</p>
+    </div>
+
+    <div style={styles.thresholdControl}>
+    <label style={styles.thresholdLabel}>Loitering Threshold</label>
+    <div style={styles.sliderContainer}>
+    <input
+    type="range"
+    min="5"
+    max="30"
+    step="1"
+    value={loiteringThreshold}
+    onChange={(e) => setLoiteringThreshold(parseInt(e.target.value))}
+    style={styles.slider}
+    />
+    <span style={styles.thresholdValue}>{loiteringThreshold}s</span>
+    </div>
+    <p style={styles.thresholdDescription}>Time in seconds to detect loitering</p>
+    </div>
+
+    <button style={styles.updateButton}>Update Thresholds</button>
+    </div>
+    </div>
+
+    {/* BOTTOM GRID */}
+    <div style={styles.bottomGrid}>
+    {/* RECORDED VIDEOS */}
+    <div style={styles.bottomPanel}>
+    <div style={styles.bottomPanelHeader}>
+    <div style={styles.panelTitle}>📹 Recorded Videos</div>
+    <div style={styles.bottomButtons}>
+    <button style={styles.addButton} onClick={() => setShowAddCameraModal(true)}>+ Add Camera</button>
+    <button style={styles.uploadButton} onClick={handleUploadVideo}>↑ Upload Video</button>
+    </div>
+    </div>
+
+    <div style={styles.tabsContainer}>
+    <button style={styles.tabActive}>Cameras</button>
+    <button style={styles.tabInactive}>Videos</button>
+    </div>
+
+    <p style={styles.emptyText}>No cameras configured</p>
+    </div>
+
+    {/* EVENT LOG */}
+    <div style={styles.bottomPanel}>
+    <div style={styles.panelTitle}>📋 Event Log</div>
+    <p style={styles.emptyText2}>Recent surveillance events</p>
+    <p style={styles.emptyText}>No events recorded</p>
+    </div>
+    </div>
+
+    {/* HIDDEN FILE INPUT */}
+    <input
+    ref={fileInputRef}
+    type="file"
+    accept="video/*"
+    onChange={handleFileSelect}
+    style={{ display: "none" }}
+    />
+
+    {/* ADD CAMERA MODAL */}
+    {showAddCameraModal && (
+      <div style={styles.modalOverlay} onClick={() => setShowAddCameraModal(false)}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div style={styles.modalHeader}>
+      <h3 style={styles.modalTitle}>Add New Camera</h3>
+      <button
+      style={styles.modalCloseButton}
+      onClick={() => setShowAddCameraModal(false)}
+      >
+      ✕
+      </button>
       </div>
 
-      {/* MONITOR ZONES SECTION */}
-      <div style={styles.monitorZonesSection}>
-        <div style={styles.sectionTitle}>📍 Monitor Zones</div>
-        <p style={styles.emptyText}>No zones defined</p>
-      </div>
-
-      {/* MAIN GRID */}
-      <div style={styles.mainGrid}>
-        {/* LEFT VIDEO PANEL */}
-        <div style={styles.videoPanel}>
-          <div style={styles.videoPanelHeader}>
-            <div style={styles.panelTitle}>📷 Video Feed</div>
-            <div style={styles.videoControls}>
-              <select
-                style={styles.select}
-                value={selectedCamera || ""}
-                onChange={(e) => setSelectedCamera(e.target.value || null)}
-              >
-                <option value="">Select Camera</option>
-                {cameras.map(cam => (
-                  <option key={cam.id} value={cam.id}>{cam.name}</option>
-                ))}
-              </select>
-              <button style={styles.noCamera}>No Camera</button>
-            </div>
-          </div>
-
-          {cameras.length === 0 ? (
-            <div style={styles.viewer}>
-              <div style={styles.viewerPlaceholder}>
-                <div style={styles.cameraIcon}>📹</div>
-                <p style={styles.placeholderText}>Select Camera or Video</p>
-                <p style={styles.placeholderSubtext}>Choose a camera or upload a video to begin</p>
-              </div>
-            </div>
-          ) : (
-            <div style={{ ...styles.cameraGrid, gridTemplateColumns: `repeat(${getGridCols()}, 1fr)` }}>
-              {cameras.map(cam => (
-                <div
-                  key={cam.id}
-                  style={{
-                    ...styles.cameraFeed,
-                    border: selectedCamera === cam.id ? "2px solid #06b6d4" : "1px solid #1f2937"
-                  }}
-                  onClick={() => setSelectedCamera(cam.id)}
-                >
-                  <div style={styles.cameraFeedHeader}>
-                    <span style={styles.cameraName}>{cam.name}</span>
-                    <button
-                      style={styles.removeButton}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveCamera(cam.id);
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  {renderCameraFeed(cam)}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* RIGHT CONTROL PANEL */}
-        <div style={styles.controlPanel}>
-          <div style={styles.panelTitle}>⚙ Control Panel</div>
-
-          {/* Select Scenario */}
-          <div style={styles.controlSection}>
-            <label style={styles.label}>Select Scenario</label>
-            <select
-              style={styles.scenarioSelect}
-              value={scenario || ""}
-              onChange={(e) => {
-                setScenario(e.target.value || null);
-                // reset any previous line configuration when scenario changes
-                setLinePoints([]);
-                setRestrictedPoint(null);
-              }}
-            >
-              <option value="">Choose a scenario</option>
-              <option value="behavior">Behavior Detection</option>
-              <option value="metro_line">Line Crossing</option>
-            </select>
-          </div>
-
-          {/* scenario-specific configuration */}
-          {scenario === "metro_line" && (
-            <div style={styles.controlSection}>
-              <p style={{ margin: "8px 0", fontSize: 14 }}>
-                {drawingLine
-                  ? "Click two points to draw the line, then a third point for the restricted side."
-                  : "Press the button below to start defining the line on the selected camera feed."}
-              </p>
-              <button
-                style={styles.smallButton}
-                onClick={() => {
-                  setDrawingLine(!drawingLine);
-                  if (!drawingLine) {
-                    // starting new drawing – clear previous
-                    setLinePoints([]);
-                    setRestrictedPoint(null);
-                  }
-                }}
-                disabled={!videoReady}
-              >
-                {drawingLine ? "Cancel Draw" : "Draw Line"}
-              </button>
-              {!videoReady && (
-                <p style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>
-                  Wait for video to load before drawing
-                </p>
-              )}
-              <p style={{ margin: "4px 0", fontSize: 12, color: "#9ca3af" }}>
-                Line points: {linePoints.map(p => `(${p.x},${p.y})`).join(" → ")}
-              </p>
-              <p style={{ margin: "4px 0", fontSize: 12, color: "#9ca3af" }}>
-                Restricted pt: {restrictedPoint ? `(${restrictedPoint.x},${restrictedPoint.y})` : "(none)"}
-              </p>
-            </div>
-          )}
-
-          {/* Start/Stop Button */}
-          <button style={styles.startButton} onClick={handleStartScenario}>
-            {status === "Running" ? "■ Stop" : "▶ Start"}
-          </button>
-
-          {/* Draw Zone Button */}
-          <button style={styles.drawZoneButton}>
-            ✏ Draw New Zone
-          </button>
-
-          {/* Status Info */}
-          <div style={styles.statusBox}>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Status:</span>
-              <span style={styles.statusValue}>{status}</span>
-            </div>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Active Scenario:</span>
-              <span style={styles.statusValue}>{scenario ? scenario.charAt(0).toUpperCase() + scenario.slice(1) : "None"}</span>
-            </div>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Active Zones:</span>
-              <span style={styles.statusValue}>{activeZones}</span>
-            </div>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Total Events:</span>
-              <span style={styles.statusValue}>{totalEvents}</span>
-            </div>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Active Alerts:</span>
-              <span style={{ ...styles.statusValue, color: "#ef4444" }}>{activeAlerts}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* THRESHOLD SETTINGS */}
-        <div style={styles.thresholdSection}>
-          <div style={styles.panelTitle}>📊 Threshold Settings</div>
-
-          <div style={styles.thresholdControl}>
-            <label style={styles.thresholdLabel}>Running Threshold</label>
-            <div style={styles.sliderContainer}>
-              <input
-                type="range"
-                min="0.5"
-                max="3"
-                step="0.1"
-                value={runningThreshold}
-                onChange={(e) => setRunningThreshold(parseFloat(e.target.value))}
-                style={styles.slider}
-              />
-              <span style={styles.thresholdValue}>{runningThreshold.toFixed(1)}x</span>
-            </div>
-            <p style={styles.thresholdDescription}>Speed multiplier to detect running</p>
-          </div>
-
-          <div style={styles.thresholdControl}>
-            <label style={styles.thresholdLabel}>Loitering Threshold</label>
-            <div style={styles.sliderContainer}>
-              <input
-                type="range"
-                min="5"
-                max="30"
-                step="1"
-                value={loiteringThreshold}
-                onChange={(e) => setLoiteringThreshold(parseInt(e.target.value))}
-                style={styles.slider}
-              />
-              <span style={styles.thresholdValue}>{loiteringThreshold}s</span>
-            </div>
-            <p style={styles.thresholdDescription}>Time in seconds to detect loitering</p>
-          </div>
-
-          <button style={styles.updateButton}>Update Thresholds</button>
-        </div>
-      </div>
-
-      {/* BOTTOM GRID */}
-      <div style={styles.bottomGrid}>
-        {/* RECORDED VIDEOS */}
-        <div style={styles.bottomPanel}>
-          <div style={styles.bottomPanelHeader}>
-            <div style={styles.panelTitle}>📹 Recorded Videos</div>
-            <div style={styles.bottomButtons}>
-              <button style={styles.addButton} onClick={() => setShowAddCameraModal(true)}>+ Add Camera</button>
-              <button style={styles.uploadButton} onClick={handleUploadVideo}>↑ Upload Video</button>
-            </div>
-          </div>
-
-          <div style={styles.tabsContainer}>
-            <button style={styles.tabActive}>Cameras</button>
-            <button style={styles.tabInactive}>Videos</button>
-          </div>
-
-          <p style={styles.emptyText}>No cameras configured</p>
-        </div>
-
-        {/* EVENT LOG */}
-        <div style={styles.bottomPanel}>
-          <div style={styles.panelTitle}>📋 Event Log</div>
-          <p style={styles.emptyText2}>Recent surveillance events</p>
-          <p style={styles.emptyText}>No events recorded</p>
-        </div>
-      </div>
-
-      {/* HIDDEN FILE INPUT */}
+      <div style={styles.modalBody}>
+      <div style={styles.formGroup}>
+      <label style={styles.formLabel}>Camera Name</label>
       <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*"
-        onChange={handleFileSelect}
-        style={{ display: "none" }}
+      type="text"
+      placeholder="e.g., Front Door, Lobby"
+      value={newCameraName}
+      onChange={(e) => setNewCameraName(e.target.value)}
+      style={styles.formInput}
       />
+      </div>
 
-      {/* ADD CAMERA MODAL */}
-      {showAddCameraModal && (
-        <div style={styles.modalOverlay} onClick={() => setShowAddCameraModal(false)}>
-          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Add New Camera</h3>
-              <button
-                style={styles.modalCloseButton}
-                onClick={() => setShowAddCameraModal(false)}
-              >
-                ✕
-              </button>
-            </div>
+      <div style={styles.formGroup}>
+      <label style={styles.formLabel}>Camera Type</label>
+      <select
+      value={newCameraType}
+      onChange={(e) => setNewCameraType(e.target.value as any)}
+      style={styles.formSelect}
+      >
+      <option value="ip">IP Camera / Stream URL (RTMP, HLS, HTTP)</option>
+      <option value="webcam">Webcam / Local Camera</option>
+      <option value="file">Video File</option>
+      </select>
+      </div>
 
-            <div style={styles.modalBody}>
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Camera Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g., Front Door, Lobby"
-                  value={newCameraName}
-                  onChange={(e) => setNewCameraName(e.target.value)}
-                  style={styles.formInput}
-                />
-              </div>
+      <div style={styles.formGroup}>
+      <label style={styles.formLabel}>
+      {newCameraType === "ip" && "Stream URL"}
+      {newCameraType === "webcam" && "Webcam Device ID"}
+      {newCameraType === "file" && "File Path / URL"}
+      </label>
+      <input
+      type="text"
+      placeholder={
+        newCameraType === "ip"
+        ? "e.g., rtmp://camera.local/stream"
+        : newCameraType === "webcam"
+        ? "e.g., /dev/video0 or camera ID"
+        : "e.g., /path/to/video.mp4"
+      }
+      value={newCameraSource}
+      onChange={(e) => setNewCameraSource(e.target.value)}
+      style={styles.formInput}
+      />
+      </div>
 
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Camera Type</label>
-                <select
-                  value={newCameraType}
-                  onChange={(e) => setNewCameraType(e.target.value as any)}
-                  style={styles.formSelect}
-                >
-                  <option value="ip">IP Camera / Stream URL (RTMP, HLS, HTTP)</option>
-                  <option value="webcam">Webcam / Local Camera</option>
-                  <option value="file">Video File</option>
-                </select>
-              </div>
+      <div style={styles.helpText}>
+      <strong>Examples:</strong>
+      <ul style={{ margin: "8px 0", paddingLeft: "20px", fontSize: "12px" }}>
+      <li>IP Camera: <code>rtmp://192.168.1.100/stream</code></li>
+      <li>IP Camera: <code>http://192.168.1.100:8080/video.m3u8</code></li>
+      <li>Webcam: <code>/dev/video0</code> (Linux) or device index</li>
+      <li>Video File: <code>/path/to/video.mp4</code> or URL</li>
+      </ul>
+      </div>
+      </div>
 
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>
-                  {newCameraType === "ip" && "Stream URL"}
-                  {newCameraType === "webcam" && "Webcam Device ID"}
-                  {newCameraType === "file" && "File Path / URL"}
-                </label>
-                <input
-                  type="text"
-                  placeholder={
-                    newCameraType === "ip"
-                      ? "e.g., rtmp://camera.local/stream"
-                      : newCameraType === "webcam"
-                        ? "e.g., /dev/video0 or camera ID"
-                        : "e.g., /path/to/video.mp4"
-                  }
-                  value={newCameraSource}
-                  onChange={(e) => setNewCameraSource(e.target.value)}
-                  style={styles.formInput}
-                />
-              </div>
-
-              <div style={styles.helpText}>
-                <strong>Examples:</strong>
-                <ul style={{ margin: "8px 0", paddingLeft: "20px", fontSize: "12px" }}>
-                  <li>IP Camera: <code>rtmp://192.168.1.100/stream</code></li>
-                  <li>IP Camera: <code>http://192.168.1.100:8080/video.m3u8</code></li>
-                  <li>Webcam: <code>/dev/video0</code> (Linux) or device index</li>
-                  <li>Video File: <code>/path/to/video.mp4</code> or URL</li>
-                </ul>
-              </div>
-            </div>
-
-            <div style={styles.modalFooter}>
-              <button
-                style={styles.cancelButton}
-                onClick={() => setShowAddCameraModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                style={styles.confirmButton}
-                onClick={handleAddCamera}
-              >
-                Add Camera
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div style={styles.modalFooter}>
+      <button
+      style={styles.cancelButton}
+      onClick={() => setShowAddCameraModal(false)}
+      >
+      Cancel
+      </button>
+      <button
+      style={styles.confirmButton}
+      onClick={handleAddCamera}
+      >
+      Add Camera
+      </button>
+      </div>
+      </div>
+      </div>
+    )}
     </div>
   );
 }

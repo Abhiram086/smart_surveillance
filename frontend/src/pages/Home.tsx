@@ -50,6 +50,10 @@ export default function Home() {
         adminUsername.trim() === TEMP_CREDENTIALS.username
         && adminPassword === TEMP_CREDENTIALS.password
       ) {
+        localStorage.setItem("authToken", "logged-in")
+        localStorage.setItem("role", "admin")
+        localStorage.setItem("username", adminUsername)
+
         navigate("/admin-dashboard")
         setLoading(false)
       } else {
@@ -68,8 +72,11 @@ export default function Home() {
         viewerUsername.trim() === TEMP_CREDENTIALS.username
         && viewerPassword === TEMP_CREDENTIALS.password
       ) {
+        localStorage.setItem("authToken", "logged-in")
+        localStorage.setItem("role", "viewer")
+        localStorage.setItem("username", viewerUsername)
+
         navigate("/viewer-dashboard")
-        setLoading(false)
       } else {
         setError("Invalid credentials. Use admin / admin.")
         setLoading(false)
@@ -99,274 +106,274 @@ export default function Home() {
 
   return (
     <div style={styles.wrapper}>
-      {/* Full screen background video */}
-      <video
-        style={styles.video}
-        autoPlay
-        muted
-        loop
-        playsInline
-      >
-        <source src="/videos/16-9.mp4" type="video/mp4" />
-      </video>
+    {/* Full screen background video */}
+    <video
+    style={styles.video}
+    autoPlay
+    muted
+    loop
+    playsInline
+    >
+    <source src="/videos/16-9.mp4" type="video/mp4" />
+    </video>
 
-      {/* Landing Content - moves to left when login is selected */}
+    {/* Landing Content - moves to left when login is selected */}
+    <motion.div
+    initial={{ opacity: 1, x: 0 }}
+    animate={{
+      opacity: loginMode ? 0 : 1,
+      x: loginMode ? -400 : 0
+    }}
+    transition={{ duration: 0.8, ease: "easeOut" }}
+    style={{
+      ...styles.landingContent,
+      pointerEvents: loginMode ? "none" : "auto"
+    }}
+    >
+    <motion.div
+    initial={{ opacity: 0, y: 40, filter: "blur(10px)" }}
+    animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+    transition={{ duration: 0.9 }}
+    style={styles.center}
+    >
+    <motion.h1
+    initial={{ opacity: 0, y: 30 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay: 0.2 }}
+    style={styles.title}
+    >
+    Smart Surveillance
+    </motion.h1>
+
+    <motion.p
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 0.7 }}
+    transition={{ delay: 0.6 }}
+    style={styles.subtitle}
+    >
+    AI Powered Real-Time Monitoring System
+    </motion.p>
+
+    <motion.div
+    style={styles.buttons}
+    initial="hidden"
+    animate="show"
+    variants={{
+      hidden: {},
+      show: { transition: { staggerChildren: 0.18 } }
+    }}
+    >
+    <motion.button
+    variants={pop}
+    onMouseEnter={() => setHoveredAdmin(true)}
+    onMouseLeave={() => setHoveredAdmin(false)}
+    animate={{
+      scale: hoveredAdmin ? 1.15 : 1,
+      background: hoveredAdmin
+      ? "linear-gradient(135deg, #1a1a1a 0%, #4a4a4a 100%)"
+      : "linear-gradient(135deg, #5c3e3e 0%, #ff1744 100%)"
+    }}
+    transition={{ duration: 0.3 }}
+    style={{
+      ...styles.btnPrimary,
+      position: "relative",
+      overflow: "hidden"
+    }}
+    onClick={handleAdminClick}
+    >
+    <img
+    src="/icons/admin.png"
+    alt="admin"
+    style={{
+      width: "140px",
+      height: "140px",
+      marginRight: "12px",
+      opacity: hoveredAdmin ? 1 : 0,
+      transition: "opacity 0.3s ease, left 0.3s ease, transform 0.3s ease",
+      position: "absolute",
+      left: hoveredAdmin ? "8px" : "calc(50% - 30px)",
+          top: "50%",
+          transform: "translateY(-50%)"
+    }}
+    />
+    <span style={{ position: "relative", zIndex: 1, transform: hoveredAdmin ? "translateX(40px)" : "translateX(0)", transition: "transform 0.3s ease" }}>Login as Admin</span>
+    </motion.button>
+
+    <motion.button
+    variants={pop}
+    onMouseEnter={() => setHoveredViewer(true)}
+    onMouseLeave={() => setHoveredViewer(false)}
+    animate={{
+      scale: hoveredViewer ? 1.15 : 1,
+      background: hoveredViewer
+      ? "linear-gradient(135deg, #1a1a1a 0%, #4a4a4a 100%)"
+      : "linear-gradient(135deg, #343842 0%, #006ace 100%)"
+    }}
+    transition={{ duration: 0.3 }}
+    style={{
+      ...styles.btnSecondary,
+      position: "relative",
+      overflow: "hidden"
+    }}
+    onClick={handleViewerClick}
+    >
+    <img
+    src="/icons/bellboy.png"
+    alt="viewer"
+    style={{
+      width: "140px",
+      height: "140px",
+      marginRight: "12px",
+      opacity: hoveredViewer ? 1 : 0,
+      transition: "opacity 0.3s ease, left 0.3s ease, transform 0.3s ease",
+      position: "absolute",
+      left: hoveredViewer ? "8px" : "calc(50% - 30px)",
+          top: "50%",
+          transform: "translateY(-50%)"
+    }}
+    />
+    <span style={{ position: "relative", zIndex: 1, transform: hoveredViewer ? "translateX(40px)" : "translateX(0)", transition: "transform 0.3s ease" }}>Login as Viewer</span>
+    </motion.button>
+
+    <motion.button
+    variants={pop}
+    onMouseEnter={() => setHoveredRegister(true)}
+    onMouseLeave={() => setHoveredRegister(false)}
+    animate={{
+      scale: hoveredRegister ? 1.15 : 1,
+      background: hoveredRegister
+      ? "linear-gradient(135deg, #1a1a1a 0%, #4a4a4a 100%)"
+      : "linear-gradient(135deg, #2d2d2d 0%, #4b5563 100%)"
+    }}
+    transition={{ duration: 0.3 }}
+    style={{
+      ...styles.btnRegister,
+      position: "relative",
+      overflow: "hidden"
+    }}
+    onClick={handleRegisterClick}
+    >
+    <img
+    src="/icons/admin.png"
+    alt="register"
+    style={{
+      width: "140px",
+      height: "140px",
+      marginRight: "12px",
+      opacity: hoveredRegister ? 1 : 0,
+      transition: "opacity 0.3s ease, left 0.3s ease, transform 0.3s ease",
+      position: "absolute",
+      left: hoveredRegister ? "8px" : "calc(50% - 30px)",
+          top: "50%",
+          transform: "translateY(-50%)"
+    }}
+    />
+    <span style={{ position: "relative", zIndex: 1, transform: hoveredRegister ? "translateX(40px)" : "translateX(0)", transition: "transform 0.3s ease" }}>Register</span>
+    </motion.button>
+    </motion.div>
+    </motion.div>
+    </motion.div>
+
+
+
+
+    {/* Admin Login Form */}
+    {(loginMode === "admin" || loginMode === "viewer" || loginMode) && (
       <motion.div
-        initial={{ opacity: 1, x: 0 }}
-        animate={{
-          opacity: loginMode ? 0 : 1,
-          x: loginMode ? -400 : 0
-        }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-        style={{
-          ...styles.landingContent,
-          pointerEvents: loginMode ? "none" : "auto"
-        }}
+      initial={{ x: 300, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ duration: 0.8, ease: "easeInOut" }}
+      style={styles.formSide}
       >
-        <motion.div
-          initial={{ opacity: 0, y: 40, filter: "blur(10px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          transition={{ duration: 0.9 }}
-          style={styles.center}
-        >
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            style={styles.title}
-          >
-            Smart Surveillance
-          </motion.h1>
+      <motion.div
+      initial={{ opacity: 0, y: 40 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      style={styles.formContainer}
+      >
+      <motion.h1
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      style={styles.formTitle}
+      >
+      {loginMode === "admin" ? "Admin Login" : loginMode === "viewer" ? "Viewer Login" : "Register"}
+      </motion.h1>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.7 }}
-            transition={{ delay: 0.6 }}
-            style={styles.subtitle}
-          >
-            AI Powered Real-Time Monitoring System
-          </motion.p>
+      <motion.form
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: 0.4 }}
+      onSubmit={loginMode === "admin" ? handleAdminLogin : loginMode === "viewer" ? handleViewerLogin : handleRegisterSubmit}
+      style={styles.form}
+      >
+      <div style={styles.formGroup}>
+      <label style={styles.label}>Username or Email</label>
+      <input
+      type="text"
+      value={loginMode === "admin" ? adminUsername : loginMode === "viewer" ? viewerUsername : regUsername}
+      onChange={(e) => {
+        if (loginMode === "admin") setAdminUsername(e.target.value)
+          else if (loginMode === "viewer") setViewerUsername(e.target.value)
+            else setRegUsername(e.target.value)
+      }}
+      style={styles.input}
+      placeholder="Enter your username or email"
+      required
+      />
+      </div>
 
-          <motion.div
-            style={styles.buttons}
-            initial="hidden"
-            animate="show"
-            variants={{
-              hidden: {},
-              show: { transition: { staggerChildren: 0.18 } }
-            }}
-          >
-            <motion.button
-              variants={pop}
-              onMouseEnter={() => setHoveredAdmin(true)}
-              onMouseLeave={() => setHoveredAdmin(false)}
-              animate={{
-                scale: hoveredAdmin ? 1.15 : 1,
-                background: hoveredAdmin
-                  ? "linear-gradient(135deg, #1a1a1a 0%, #4a4a4a 100%)"
-                  : "linear-gradient(135deg, #5c3e3e 0%, #ff1744 100%)"
-              }}
-              transition={{ duration: 0.3 }}
-              style={{
-                ...styles.btnPrimary,
-                position: "relative",
-                overflow: "hidden"
-              }}
-              onClick={handleAdminClick}
-            >
-              <img
-                src="/icons/admin.png"
-                alt="admin"
-                style={{
-                  width: "140px",
-                  height: "140px",
-                  marginRight: "12px",
-                  opacity: hoveredAdmin ? 1 : 0,
-                  transition: "opacity 0.3s ease, left 0.3s ease, transform 0.3s ease",
-                  position: "absolute",
-                  left: hoveredAdmin ? "8px" : "calc(50% - 30px)",
-                  top: "50%",
-                  transform: "translateY(-50%)"
-                }}
-              />
-              <span style={{ position: "relative", zIndex: 1, transform: hoveredAdmin ? "translateX(40px)" : "translateX(0)", transition: "transform 0.3s ease" }}>Login as Admin</span>
-            </motion.button>
+      <div style={styles.formGroup}>
+      <label style={styles.label}>Password</label>
+      <input
+      type="password"
+      value={loginMode === "admin" ? adminPassword : loginMode === "viewer" ? viewerPassword : regPassword}
+      onChange={(e) => {
+        if (loginMode === "admin") setAdminPassword(e.target.value)
+          else if (loginMode === "viewer") setViewerPassword(e.target.value)
+            else setRegPassword(e.target.value)
+      }}
+      style={styles.input}
+      placeholder="Enter your password"
+      required
+      />
+      </div>
 
-            <motion.button
-              variants={pop}
-              onMouseEnter={() => setHoveredViewer(true)}
-              onMouseLeave={() => setHoveredViewer(false)}
-              animate={{
-                scale: hoveredViewer ? 1.15 : 1,
-                background: hoveredViewer
-                  ? "linear-gradient(135deg, #1a1a1a 0%, #4a4a4a 100%)"
-                  : "linear-gradient(135deg, #343842 0%, #006ace 100%)"
-              }}
-              transition={{ duration: 0.3 }}
-              style={{
-                ...styles.btnSecondary,
-                position: "relative",
-                overflow: "hidden"
-              }}
-              onClick={handleViewerClick}
-            >
-              <img
-                src="/icons/bellboy.png"
-                alt="viewer"
-                style={{
-                  width: "140px",
-                  height: "140px",
-                  marginRight: "12px",
-                  opacity: hoveredViewer ? 1 : 0,
-                  transition: "opacity 0.3s ease, left 0.3s ease, transform 0.3s ease",
-                  position: "absolute",
-                  left: hoveredViewer ? "8px" : "calc(50% - 30px)",
-                  top: "50%",
-                  transform: "translateY(-50%)"
-                }}
-              />
-              <span style={{ position: "relative", zIndex: 1, transform: hoveredViewer ? "translateX(40px)" : "translateX(0)", transition: "transform 0.3s ease" }}>Login as Viewer</span>
-            </motion.button>
+      {error && <div style={styles.error}>{error}</div>}
 
-            <motion.button
-              variants={pop}
-              onMouseEnter={() => setHoveredRegister(true)}
-              onMouseLeave={() => setHoveredRegister(false)}
-              animate={{
-                scale: hoveredRegister ? 1.15 : 1,
-                background: hoveredRegister
-                  ? "linear-gradient(135deg, #1a1a1a 0%, #4a4a4a 100%)"
-                  : "linear-gradient(135deg, #2d2d2d 0%, #4b5563 100%)"
-              }}
-              transition={{ duration: 0.3 }}
-              style={{
-                ...styles.btnRegister,
-                position: "relative",
-                overflow: "hidden"
-              }}
-              onClick={handleRegisterClick}
-            >
-              <img
-                src="/icons/admin.png"
-                alt="register"
-                style={{
-                  width: "140px",
-                  height: "140px",
-                  marginRight: "12px",
-                  opacity: hoveredRegister ? 1 : 0,
-                  transition: "opacity 0.3s ease, left 0.3s ease, transform 0.3s ease",
-                  position: "absolute",
-                  left: hoveredRegister ? "8px" : "calc(50% - 30px)",
-                  top: "50%",
-                  transform: "translateY(-50%)"
-                }}
-              />
-              <span style={{ position: "relative", zIndex: 1, transform: hoveredRegister ? "translateX(40px)" : "translateX(0)", transition: "transform 0.3s ease" }}>Register</span>
-            </motion.button>
-          </motion.div>
-        </motion.div>
-      </motion.div>
-
-
-
-
-      {/* Admin Login Form */}
-      {(loginMode === "admin" || loginMode === "viewer" || loginMode) && (
-        <motion.div
-          initial={{ x: 300, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.8, ease: "easeInOut" }}
-          style={styles.formSide}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            style={styles.formContainer}
-          >
-            <motion.h1
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              style={styles.formTitle}
-            >
-              {loginMode === "admin" ? "Admin Login" : loginMode === "viewer" ? "Viewer Login" : "Register"}
-            </motion.h1>
-
-            <motion.form
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.4 }}
-              onSubmit={loginMode === "admin" ? handleAdminLogin : loginMode === "viewer" ? handleViewerLogin : handleRegisterSubmit}
-              style={styles.form}
-            >
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Username or Email</label>
-                <input
-                  type="text"
-                  value={loginMode === "admin" ? adminUsername : loginMode === "viewer" ? viewerUsername : regUsername}
-                  onChange={(e) => {
-                    if (loginMode === "admin") setAdminUsername(e.target.value)
-                    else if (loginMode === "viewer") setViewerUsername(e.target.value)
-                    else setRegUsername(e.target.value)
-                  }}
-                  style={styles.input}
-                  placeholder="Enter your username or email"
-                  required
-                />
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Password</label>
-                <input
-                  type="password"
-                  value={loginMode === "admin" ? adminPassword : loginMode === "viewer" ? viewerPassword : regPassword}
-                  onChange={(e) => {
-                    if (loginMode === "admin") setAdminPassword(e.target.value)
-                    else if (loginMode === "viewer") setViewerPassword(e.target.value)
-                    else setRegPassword(e.target.value)
-                  }}
-                  style={styles.input}
-                  placeholder="Enter your password"
-                  required
-                />
-              </div>
-
-              {error && <div style={styles.error}>{error}</div>}
-
-              {(loginMode === "admin" || loginMode === "viewer") && (
-                <div style={styles.helperText}>Temporary login: admin / admin</div>
-              )}
-
-              <motion.button
-                type="submit"
-                disabled={loading}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                style={{
-                  ...styles.submitBtn,
-                  background: loginMode === "admin"
-                    ? "linear-gradient(135deg, #ff8181 0%, #80001a 100%)"
-                    : loginMode === "viewer" ? "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)" : "linear-gradient(135deg, #10b981 0%, #059669 100%)"
-                }}
-              >
-                {loading ? "Processing..." : loginMode === "admin" ? "Login as Admin" : loginMode === "viewer" ? "Login as Viewer" : "Register"}
-              </motion.button>
-            </motion.form>
-
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
-              style={styles.backLink}
-            >
-              <a onClick={handleBack} style={styles.link}>
-                Back to Home
-              </a>
-            </motion.p>
-          </motion.div>
-        </motion.div>
+      {(loginMode === "admin" || loginMode === "viewer") && (
+        <div style={styles.helperText}>Temporary login: admin / admin</div>
       )}
+
+      <motion.button
+      type="submit"
+      disabled={loading}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      style={{
+        ...styles.submitBtn,
+        background: loginMode === "admin"
+        ? "linear-gradient(135deg, #ff8181 0%, #80001a 100%)"
+        : loginMode === "viewer" ? "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)" : "linear-gradient(135deg, #10b981 0%, #059669 100%)"
+      }}
+      >
+      {loading ? "Processing..." : loginMode === "admin" ? "Login as Admin" : loginMode === "viewer" ? "Login as Viewer" : "Register"}
+      </motion.button>
+      </motion.form>
+
+      <motion.p
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.6 }}
+      style={styles.backLink}
+      >
+      <a onClick={handleBack} style={styles.link}>
+      Back to Home
+      </a>
+      </motion.p>
+      </motion.div>
+      </motion.div>
+    )}
     </div>
   )
 }

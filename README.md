@@ -1,59 +1,81 @@
+````markdown
 # 🛰️ Smart Surveillance System (YOLOv8 + FastAPI + React)
 
 AI-powered real-time surveillance system capable of monitoring live cameras and detecting suspicious activities.
 
-Works on **Windows, Linux and MacOS**
-Supports **CPU and NVIDIA GPU automatically**
+Supports **Windows, Linux and MacOS**  
+Automatically uses **CPU or NVIDIA GPU (CUDA)**.
 
 ---
 
-## ✨ Features
+# ✨ Features
 
-* 👤 Person detection using YOLOv8
-* 🏃 Running / abnormal behavior detection
-* 🚧 Metro line crossing detection
-* 🔒 Restricted zone monitoring
-* 📷 Live webcam streaming inside browser
-* 🌐 Full web dashboard (React UI)
-* ⚡ Automatic GPU usage if CUDA available
-* 📦 Automatic model download (no manual setup)
+- 👤 Person detection using **YOLOv8**
+- 🏃 Running / abnormal behavior detection
+- 🚧 Metro line crossing detection
+- 🔒 Restricted zone monitoring
+- 📷 Live webcam streaming inside browser
+- 🌐 Full web dashboard (React UI)
+- 👥 User authentication (Admin / Viewer)
+- ⚡ Automatic GPU usage if CUDA available
+- 📦 Automatic model download (no manual setup)
 
 ---
 
-## 🧠 System Architecture
+# 🧠 System Architecture
 
-```
 Camera → Scenario → Detector → Stream → Browser UI
-```
 
-Backend:
+### Backend
+- **FastAPI**
+- **OpenCV**
+- **Ultralytics YOLOv8**
+- **PostgreSQL authentication**
 
-> FastAPI + OpenCV + Ultralytics YOLO
+### Frontend
+- **React**
+- **Vite**
+- **TypeScript**
+- **Framer Motion UI**
 
-Frontend:
+### Streaming
+MJPEG HTTP stream (no plugins required)
 
-> React + Vite + TypeScript
+---
 
-Streaming:
+# 🧰 Requirements
 
-> MJPEG HTTP stream (no plugins required)
+Install the following software:
+
+| Software | Version |
+|--------|--------|
+Python | 3.10+ |
+Node.js | 18+ |
+PostgreSQL | 14+ |
+Git | Latest |
+
+Optional:
+
+| Hardware | Support |
+|--------|--------|
+NVIDIA GPU | CUDA 11+ |
 
 ---
 
 # 🚀 Installation Guide
-
----
 
 ## 1️⃣ Clone Repository
 
 ```bash
 git clone https://github.com/Abhiram086/smart_surveillance.git
 cd smart_surveillance
-```
+````
 
 ---
 
-## 2️⃣ Create Virtual Environment
+# 🐍 Backend Setup
+
+## 2️⃣ Create Python Virtual Environment
 
 ### Windows
 
@@ -85,36 +107,133 @@ YOLOv8n model (~6MB)
 
 ---
 
-## 4️⃣ Install Frontend (Web Dashboard)
+# 🗄️ Database Setup (PostgreSQL)
 
-You must have **Node.js 18+**
+The system uses **PostgreSQL for user authentication**.
 
-Check:
+---
 
-```bash
-node -v
+## 1️⃣ Install PostgreSQL
+
+Download:
+
+[https://www.postgresql.org/download/](https://www.postgresql.org/download/)
+
+During installation remember the password for:
+
+```
+postgres
 ```
 
-Then install UI:
+---
+
+## 2️⃣ Create Database
+
+Open terminal or command prompt:
+
+```bash
+psql -U postgres
+```
+
+Run the following:
+
+```sql
+CREATE DATABASE surveillance;
+
+CREATE USER surveillance_user WITH PASSWORD 'surveillance_pass';
+
+GRANT ALL PRIVILEGES ON DATABASE surveillance TO surveillance_user;
+```
+
+Connect to the database:
+
+```sql
+\c surveillance
+```
+
+Grant schema permissions:
+
+```sql
+GRANT ALL ON SCHEMA public TO surveillance_user;
+ALTER SCHEMA public OWNER TO surveillance_user;
+```
+
+Exit:
+
+```sql
+\q
+```
+
+---
+
+## 3️⃣ Configure Environment Variables
+
+Create file:
+
+```
+backend/.env
+```
+
+Add:
+
+```
+DATABASE_URL=postgresql://surveillance_user:surveillance_pass@localhost:5432/surveillance
+```
+
+---
+
+## 4️⃣ Initialize Database Tables
+
+From backend folder:
+
+```bash
+cd backend
+python -m db.init_db
+```
+
+This creates the table:
+
+```
+users
+```
+
+Schema:
+
+```
+users
+├── id SERIAL PRIMARY KEY
+├── username TEXT UNIQUE
+├── password_hash TEXT
+├── role TEXT
+└── created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+```
+
+---
+
+# 🌐 Frontend Setup
+
+## 5️⃣ Install Frontend Dependencies
 
 ```bash
 cd frontend
 npm install
 ```
 
-(or pnpm install)
+(or)
+
+```bash
+pnpm install
+```
 
 ---
 
-# ▶️ Running the System
+# ▶️ Running The System
 
-You need **2 terminals**
+You need **two terminals**.
 
 ---
 
 ## Terminal 1 — Start Backend
-
-From project root:
 
 ```bash
 cd backend
@@ -146,9 +265,24 @@ You should now see the surveillance dashboard 🎥
 
 ---
 
-# 🎯 Running Individual Scenarios (CLI mode)
+# 🔐 Authentication
 
-You can also run detectors without UI.
+Users can register directly from the UI.
+
+Roles supported:
+
+```
+admin
+viewer
+```
+
+Credentials are stored securely using **bcrypt hashing** in PostgreSQL.
+
+---
+
+# 🎯 Running Detection Without Web UI
+
+You can run detectors via CLI.
 
 ### Line Crossing
 
@@ -174,17 +308,17 @@ Press **Q** to exit window.
 
 # 📹 Using Your Own Video
 
-1. Place video inside:
+Place videos inside:
 
 ```
 videos/
 ```
 
-2. Edit config file:
+Edit config file:
 
 Example:
 
-```json
+```
 "video": "videos/myvideo.mp4"
 ```
 
@@ -211,14 +345,14 @@ Example:
 
 # ⚙️ GPU Support
 
-The program automatically detects GPU:
+The system automatically detects CUDA.
 
 ```
-CUDA available → uses GPU
-No CUDA → uses CPU
+CUDA available → GPU used
+No CUDA → CPU used
 ```
 
-No extra configuration needed.
+No configuration required.
 
 ---
 
@@ -227,13 +361,14 @@ No extra configuration needed.
 ```
 smart_surveillance/
 │
-├── backend/          FastAPI API + streaming
-├── core/             Detection engines
-├── scenarios/        Scenario logic
-├── config/           JSON configurations
-├── frontend/         React dashboard
-├── videos/           Sample videos
-├── main.py           CLI dispatcher
+├── backend/        FastAPI backend + API routes
+├── core/           Detection engines
+├── scenarios/      Scenario logic
+├── config/         Scenario configuration files
+├── frontend/       React dashboard
+├── videos/         Sample videos
+├── db/             Database initialization
+├── main.py         CLI detection runner
 └── requirements.txt
 ```
 
@@ -241,50 +376,63 @@ smart_surveillance/
 
 # 🧪 Tested Platforms
 
-| OS            | Status |
-| ------------- | ------ |
-| Windows 10/11 | ✅      |
-| Ubuntu / Arch | ✅      |
-| MacOS         | ✅      |
-| NVIDIA GPU    | ✅      |
-| CPU only      | ✅      |
+| OS                  | Status |
+| ------------------- | ------ |
+| Windows 10/11       | ✅      |
+| Ubuntu / Arch Linux | ✅      |
+| MacOS               | ✅      |
+| NVIDIA GPU          | ✅      |
+| CPU Only            | ✅      |
 
 ---
 
 # ⚠️ Known Limitations (WIP)
 
-* Multi-camera management coming soon
-* Admin/User authentication pending
-* Config drawing tools not yet added
+* Multi-camera support coming soon
+* Config drawing UI not implemented
+* Alert notifications not implemented
 
 ---
 
 # 🛠️ Troubleshooting
 
-### Webcam not opening
+## Webcam not opening
 
-Close apps using camera (Zoom, Teams, browser tabs)
-
-### Port already in use
-
-Change port:
+Close applications using camera:
 
 ```
+Zoom
+Teams
+Browser tabs
+```
+
+---
+
+## Port already in use
+
+Change backend port:
+
+```bash
 uvicorn app:app --reload --port 8001
 ```
 
-### Model downloads every run
+---
 
-Ensure internet available first run
+## Model downloads every run
+
+Ensure internet connection on first run.
 
 ---
 
 # 📜 License
 
-Educational / Mini Project
+Educational Mini Project
 
 ---
 
 # 👨‍💻 Author
 
 Abhiram S
+
+```
+```
