@@ -11,6 +11,7 @@ import os
 from fastapi import Request
 from scenarios.behavior import run as behavior_run
 from scenarios.line_crossing import run as metro_run
+from scenarios.zone_detection import run as zone_run
 
 
 # simple in-memory registry of stop signals keyed by token.  the
@@ -19,11 +20,7 @@ from scenarios.line_crossing import run as metro_run
 stop_signals: dict[str, bool] = {}
 
 async def await_request_disconnected(request: Request) -> bool:
-    """Return True if the client has disconnected from the request.
-
-    FastAPI's ``request.is_disconnected()`` is a coroutine; this wrapper makes
-    the intent clearer and handles any exceptions.
-    """
+    """Return True if the client has disconnected from the request."""
     try:
         return await request.is_disconnected()
     except Exception:
@@ -41,19 +38,12 @@ async def frame_generator(
     video: str | None = None,
     token: str | None = None,
 ):
-    """Asynchronous generator that yields frames until the client disconnects.
-
-    Converting the generator to async allows us to ``await``
-    ``request.is_disconnected()`` at each iteration so the pipeline can be
-    terminated promptly when the browser navigates away or the user stops.
-
-    The remainder of the body is unchanged from the previous synchronous
-    implementation.
-    """
+    """Asynchronous generator that yields MJPEG frames until client disconnects."""
 
     config_map = {
-        "metro_line": "config/metro_line.json",
-        "behavior": "config/behavior.json"
+        "metro_line":     "config/metro_line.json",
+        "behavior":       "config/behavior.json",
+        "zone_detection": "config/restricted_zone.json",
     }
 
     if scenario not in config_map:
@@ -66,7 +56,6 @@ async def frame_generator(
 
     # override config values from query params
     if video is not None:
-        # allow numeric strings (camera indices) or paths/URLs
         try:
             cfg["video"] = int(video)
         except ValueError:
@@ -83,8 +72,9 @@ async def frame_generator(
         if len(parts) == 2:
             coords = list(map(int, parts))
             cfg["restricted_point"] = [coords[0], coords[1]]
-    
+
     if zone is not None:
+        # zone is semicolon-separated "x,y" pairs  e.g. "100,200;300,200;300,400;100,400"
         points = []
         for pair in zone.split(";"):
             x, y = map(int, pair.split(","))
@@ -92,14 +82,11 @@ async def frame_generator(
         cfg["zone"] = points
 
     video_src = cfg["video"]
-    # if video_src is a relative filesystem path, make it absolute with PROJECT_ROOT
+    # make relative filesystem paths absolute
     if isinstance(video_src, str):
-        # skip URLs and empty strings
         if not (video_src.startswith("http://") or video_src.startswith("https://") or video_src.startswith("rtmp://")):
-            # numeric strings may have been converted above; if still str try to join
             if not os.path.isabs(video_src):
                 video_src = os.path.join(PROJECT_ROOT, video_src)
-            # normalize to handle leading ./ etc
             video_src = os.path.normpath(video_src)
     cfg["video"] = video_src
 
@@ -107,12 +94,12 @@ async def frame_generator(
     try:
         if scenario == "behavior":
             gen = behavior_run(video_src, cfg, stream=True)
+        elif scenario == "zone_detection":
+            gen = zone_run(video_src, cfg, stream=True)
         else:
             gen = metro_run(video_src, cfg, stream=True)
     except Exception as e:
-        # pipeline failed before yielding any frames (e.g. missing config)
         print(f"[ERROR] scenario '{scenario}' initialization failed: {e}")
-        # produce a static error frame so client can see something
         import numpy as np
         err_frame = np.zeros((240, 640, 3), dtype="uint8")
         cv2.putText(err_frame, str(e), (10, 30),
@@ -125,7 +112,7 @@ async def frame_generator(
                 b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n'
             )
         return
-    # generator may be None if pipeline detected an error itself
+
     if gen is None:
         err = "pipeline returned no frames (video open failure perhaps)"
         print(f"[ERROR] {err}")
@@ -143,11 +130,9 @@ async def frame_generator(
         return
 
     for frame in gen:
-        # break loop if client disconnected
         if await await_request_disconnected(request):
             print("[INFO] client disconnected, stopping generator")
             break
-        # break if frontend explicitly asked us to stop the stream
         if token and stop_signals.get(token):
             print(f"[INFO] stop signal received for token {token}")
             break
