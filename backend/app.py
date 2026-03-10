@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import os
+import time
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Depends, FastAPI, UploadFile, File, Request, HTTPException
@@ -10,6 +13,7 @@ from pydantic import BaseModel, Field
 from psycopg2.extensions import connection
 
 from streamer import frame_generator, stop_signals
+import camera_manager
 from db import init_db_pool, close_db_pool, get_db_connection
 from db.schema import create_tables
 from db.auth import authenticate_user, register_user
@@ -22,6 +26,9 @@ except ImportError:
 
 app = FastAPI()
 
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=100)
     password: str = Field(min_length=4, max_length=128)
@@ -33,6 +40,27 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class StartCameraRequest(BaseModel):
+    """
+    Body for POST /cameras/start.
+
+    scenario     : "behavior" | "metro_line" | "zone_detection"
+    video        : file path, RTMP URL, or int (0 for webcam)
+    line         : "x1,y1,x2,y2"   (metro_line only)
+    restricted_point: "x,y"        (metro_line only)
+    zone         : "x1,y1;x2,y2;…" (zone_detection only)
+    """
+    camera_id: str
+    scenario: str
+    video: str | int | None = None
+    line: str | None = None
+    restricted_point: str | None = None
+    zone: str | None = None
+    infer_every: int = 2  # 1=every frame, 2=every 2nd, 3=every 3rd
+
+
+# ── Startup / shutdown ────────────────────────────────────────────────────────
+
 @app.on_event("startup")
 def on_startup() -> None:
     init_db_pool()
@@ -40,8 +68,7 @@ def on_startup() -> None:
     conn = next(db_dep)
     try:
         create_tables(conn)
-    except Exception as exc:  # don't fail startup for permission issues
-        # permission hints are printed by create_tables
+    except Exception as exc:
         print(f"startup: {exc}")
     finally:
         db_dep.close()
@@ -50,8 +77,11 @@ def on_startup() -> None:
 @app.on_event("shutdown")
 def on_shutdown() -> None:
     close_db_pool()
+    camera_manager.stop_all()
 
-# include the legacy router if available
+
+# ── Middleware / static ───────────────────────────────────────────────────────
+
 if auth_router is not None:
     app.include_router(auth_router)
 
@@ -63,19 +93,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# serve uploaded video files so that cv2 can open them later
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 VIDEOS_DIR = os.path.join(PROJECT_ROOT, "videos")
-# ensure directory exists
+CONFIG_DIR = os.path.join(PROJECT_ROOT, "config")
 os.makedirs(VIDEOS_DIR, exist_ok=True)
 
 app.mount("/videos", StaticFiles(directory=VIDEOS_DIR), name="videos")
 
 
+# ── Health ────────────────────────────────────────────────────────────────────
+
 @app.get("/")
 def root():
     return {"status": "Smart Surveillance Backend Running"}
 
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
 
 @app.post("/api/register")
 def api_register(
@@ -102,35 +135,25 @@ def api_login(
         raise HTTPException(status_code=401, detail="Invalid username or password")
     return {"message": "Login successful", "user": user}
 
+
+# ── File upload ───────────────────────────────────────────────────────────────
+
 @app.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
-    """Receive a video file from the frontend and save to the videos folder.
-
-    Returns a relative path that can be supplied as the ``video`` parameter
-    when starting a scenario.  The frontend will include this path in the
-    query string; ``cv2.VideoCapture`` can open it since the working directory
-    is the project root.
-    """
     dest_path = os.path.join(VIDEOS_DIR, file.filename)
-    # overwrite if already exists
     with open(dest_path, "wb") as f:
         content = await file.read()
         f.write(content)
-
     return {"location": f"videos/{file.filename}"}
+
+
+# ── Legacy single-stream endpoints (unchanged) ────────────────────────────────
 
 @app.post("/stop")
 async def stop_stream(token: str):
-    """Signal a running stream identified by *token* to terminate.
-
-    The frontend generates a random token when it starts a scenario and
-    includes it as a query parameter.  Sending a POST to this endpoint with
-    the same token sets a flag that the streaming generator monitors and
-    breaks out immediately.  This allows the UI to stop a video even if the
-    browser connection remains open for some reason.
-    """
     stop_signals[token] = True
     return {"stopped": True}
+
 
 @app.get("/stream/{scenario}")
 def stream_video(
@@ -142,22 +165,144 @@ def stream_video(
     video: str | None = None,
     token: str | None = None,
 ):
-    """Return a video stream processed by the chosen scenario.
-
-    Optional query parameters allow the frontend to override configuration
-    values without editing the JSON files.  Supported overrides:
-
-    * ``line``: four comma separated ints ``x1,y1,x2,y2`` for line crossing
-    * ``restricted_point``: two comma separated ints ``x,y`` to choose side
-    * ``zone``: semicolon-separated ``x,y`` pairs defining a polygonal zone
-      (first and last point need not be repeated)
-    * ``video``: path or URL of the video/source to use instead of the
-      value stored in the config file (e.g. camera index or file path).
-    """
-
-    # forward an optional token so that the frontend can request a
-    # running stream be stopped explicitly (see /stop below).
     return StreamingResponse(
         frame_generator(request, scenario, line, restricted_point, zone, video, token),
-        media_type="multipart/x-mixed-replace; boundary=frame"
+        media_type="multipart/x-mixed-replace; boundary=frame",
     )
+
+
+# ── Multi-camera endpoints ────────────────────────────────────────────────────
+
+def _build_cfg(scenario: str, payload: StartCameraRequest) -> dict:
+    """
+    Load base config JSON for the scenario and overlay values from the request.
+    """
+    config_map = {
+        "metro_line":     "metro_line.json",
+        "behavior":       "behavior.json",
+        "zone_detection": "restricted_zone.json",
+    }
+    cfg_file = config_map.get(scenario)
+    if cfg_file is None:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario}")
+
+    cfg_path = os.path.join(CONFIG_DIR, cfg_file)
+    with open(cfg_path) as f:
+        cfg = json.load(f)
+
+    # Override video source
+    if payload.video is not None:
+        # make relative paths absolute
+        video = payload.video
+        if isinstance(video, str) and not os.path.isabs(video) and not video.startswith(("rtmp://", "rtsp://", "http")):
+            video = os.path.join(PROJECT_ROOT, video)
+        cfg["video"] = video
+
+    # Override line params (metro_line)
+    if payload.line:
+        parts = [int(v) for v in payload.line.split(",")]
+        cfg["line"] = [[parts[0], parts[1]], [parts[2], parts[3]]]
+
+    if payload.restricted_point:
+        x, y = [int(v) for v in payload.restricted_point.split(",")]
+        cfg["restricted_point"] = [x, y]
+
+    # Override zone params (zone_detection)
+    if payload.zone:
+        cfg["zone"] = [
+            [int(v) for v in pair.split(",")]
+            for pair in payload.zone.split(";")
+            if pair.strip()
+        ]
+
+    # Inference throttle
+    cfg["infer_every"] = max(1, min(5, payload.infer_every))
+
+    return cfg
+
+
+@app.post("/cameras/start")
+def start_camera(payload: StartCameraRequest):
+    """
+    Start inference on a camera in the background.
+    The frontend supplies a camera_id (UUID) it generated itself.
+    Returns immediately — the worker starts asynchronously.
+    """
+    try:
+        cfg = _build_cfg(payload.scenario, payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        camera_manager.start(payload.camera_id, payload.scenario, cfg)
+    except ValueError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
+    return {"started": True, "camera_id": payload.camera_id}
+
+
+@app.post("/cameras/stop")
+def stop_camera(camera_id: str):
+    """Stop inference for one camera."""
+    found = camera_manager.stop(camera_id)
+    return {"stopped": found, "camera_id": camera_id}
+
+
+@app.get("/cameras/status")
+def cameras_status():
+    """List all active camera workers and their state."""
+    return {"cameras": camera_manager.status()}
+
+
+@app.get("/cameras/stream/{camera_id}")
+async def stream_camera(camera_id: str, request: Request):
+    """
+    MJPEG stream for a specific camera worker.
+    Reads pre-annotated frames from the worker's latest_frame buffer.
+    This endpoint is lightweight — no inference happens here.
+    """
+    async def generate():
+        no_frame_img: bytes | None = None  # lazy-loaded placeholder
+
+        while True:
+            # Check for client disconnect
+            if await request.is_disconnected():
+                break
+
+            frame = camera_manager.get_frame(camera_id)
+
+            if frame is None:
+                # Worker not started or no frame yet — send a placeholder
+                if no_frame_img is None:
+                    no_frame_img = _make_placeholder_frame(camera_id)
+                frame = no_frame_img
+                await asyncio.sleep(0.2)
+            else:
+                await asyncio.sleep(0.033)   # ~30 fps max drain rate
+
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+            )
+
+    return StreamingResponse(
+        generate(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _make_placeholder_frame(camera_id: str) -> bytes:
+    """Return a small dark JPEG with 'Connecting...' text."""
+    import numpy as np
+    import cv2
+    img = np.zeros((240, 426, 3), dtype=np.uint8)
+    cv2.putText(img, "Connecting...", (80, 115),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (100, 100, 100), 2)
+    cv2.putText(img, camera_id[:16], (80, 145),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (60, 60, 60), 1)
+    _, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    return buf.tobytes()
