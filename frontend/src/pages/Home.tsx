@@ -82,9 +82,15 @@ export default function Home() {
 
       if (titleContainerRef.current && beamOverlayRef.current) {
         const rect = titleContainerRef.current.getBoundingClientRect()
-        // CCTV lens pivot: left:60 + transformOrigin 10px, top:60 + center of 40px
-        const pivotPageX = 70
-        const pivotPageY = 80
+        // CCTV container is at clamp(20px, 5vw, 60px)
+        const vw = window.innerWidth / 100
+        const cctvOffset = Math.max(20, Math.min(60, 5 * vw))
+        const bodyHeight = Math.max(20, Math.min(40, 4 * vw))
+        const pivotX = Math.min(10, 2 * vw)
+        
+        // CCTV lens pivot: left: cctvOffset + transformOrigin, top: cctvOffset + center of bodyHeight
+        const pivotPageX = cctvOffset + pivotX
+        const pivotPageY = cctvOffset + (bodyHeight / 2)
         const lx = pivotPageX - rect.left
         const ly = pivotPageY - rect.top
         // Half-angle matches original light cone clipPath geometry (~14deg)
@@ -496,17 +502,17 @@ const styles: any = {
 
   cctvContainer: {
     position: "absolute",
-    top: "60px",
-    left: "60px",
+    top: "clamp(20px, 5vw, 60px)",
+    left: "clamp(20px, 5vw, 60px)",
     zIndex: 3
   },
 
   cctvStand: {
     position: "absolute",
-    top: "10px",
-    left: "-40px",
-    width: "50px",
-    height: "12px",
+    top: "clamp(2px, 1vw, 10px)",
+    left: "clamp(-15px, -3vw, -40px)",
+    width: "clamp(25px, 5vw, 50px)",
+    height: "clamp(6px, 1vw, 12px)",
     backgroundColor: "#334155",
     borderRadius: "4px",
     transform: "rotate(20deg)",
@@ -516,46 +522,46 @@ const styles: any = {
 
   cctvBody: {
     position: "absolute",
-    width: "90px",
-    height: "40px",
+    width: "clamp(50px, 8vw, 90px)",
+    height: "clamp(20px, 4vw, 40px)",
     backgroundColor: "#1e293b",
     borderRadius: "10px",
-    border: "2px solid #475569",
+    border: "clamp(1px, 0.2vw, 2px) solid #475569",
     zIndex: 2,
     boxShadow: "0 15px 25px -5px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(255,255,255,0.1)",
-    transformOrigin: "10px center",
+    transformOrigin: "min(10px, 2vw) center",
     animation: "cameraPan 12s cubic-bezier(0.4, 0, 0.2, 1) infinite"
   },
 
   cctvLens: {
     position: "absolute",
-    right: "-6px",
-    top: "4px",
-    width: "28px",
-    height: "28px",
+    right: "clamp(-2px, -0.5vw, -6px)",
+    top: "clamp(1px, 0.4vw, 4px)",
+    width: "clamp(14px, 2.5vw, 28px)",
+    height: "clamp(14px, 2.5vw, 28px)",
     backgroundColor: "#020617",
     borderRadius: "50%",
-    border: "3px solid #64748b",
+    border: "clamp(1px, 0.3vw, 3px) solid #64748b",
     boxShadow: "inset 0 0 10px #000"
   },
 
   cctvLightReflect: {
     position: "absolute",
-    top: "4px",
-    left: "4px",
-    width: "8px",
-    height: "8px",
+    top: "clamp(1px, 0.4vw, 4px)",
+    left: "clamp(1px, 0.4vw, 4px)",
+    width: "clamp(4px, 0.8vw, 8px)",
+    height: "clamp(4px, 0.8vw, 8px)",
     backgroundColor: "rgba(255, 255, 255, 0.4)",
     borderRadius: "50%",
   },
 
   cctvLightWrapper: {
     position: "absolute",
-    top: "60px",
-    left: "60px",
-    width: "90px",
-    height: "40px",
-    transformOrigin: "10px center",
+    top: "clamp(20px, 5vw, 60px)",
+    left: "clamp(20px, 5vw, 60px)",
+    width: "clamp(50px, 8vw, 90px)",
+    height: "clamp(20px, 4vw, 40px)",
+    transformOrigin: "min(10px, 2vw) center",
     animation: "cameraPan 12s cubic-bezier(0.4, 0, 0.2, 1) infinite",
     pointerEvents: "none",
     zIndex: 20
@@ -594,9 +600,9 @@ const styles: any = {
   },
 
   title: {
-    fontSize: "9rem",
+    fontSize: "clamp(3.5rem, 8vw, 9rem)",
     fontWeight: 700,
-    letterSpacing: "-5px",
+    letterSpacing: "clamp(-2px, -0.5vw, -5px)",
     marginTop: 0,
     marginBottom: 10,
     fontFamily: "Rinter, sans-serif",
@@ -606,8 +612,9 @@ const styles: any = {
 
   subtitle: {
     marginBottom: 40,
-    fontSize: "1.2rem",
-    color: "#ffffff"
+    fontSize: "clamp(0.9rem, 1.5vw, 1.2rem)",
+    color: "#ffffff",
+    padding: "0 20px"
   },
 
   buttons: {
@@ -631,7 +638,7 @@ const styles: any = {
     alignItems: "center",
     justifyContent: "center",
     fontWeight: 600,
-    width: "320px",
+    width: "clamp(280px, 80vw, 320px)",
     transition: "all 0.3s ease",
     backdropFilter: "blur(10px)"
   },
@@ -648,7 +655,7 @@ const styles: any = {
     alignItems: "center",
     justifyContent: "center",
     fontWeight: 600,
-    width: "320px",
+    width: "clamp(280px, 80vw, 320px)",
     transition: "all 0.3s ease",
     backdropFilter: "blur(10px)"
   },
@@ -806,9 +813,9 @@ const styles: any = {
   },
 
   titleOverlay: {
-    fontSize: "9rem",
+    fontSize: "clamp(3.5rem, 8vw, 9rem)",
     fontWeight: 700,
-    letterSpacing: "-5px",
+    letterSpacing: "clamp(-2px, -0.5vw, -5px)",
     fontFamily: "Rinter, sans-serif",
     color: "#ffffff",
     margin: 0,
