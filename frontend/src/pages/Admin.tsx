@@ -1,6 +1,113 @@
 import { useState } from "react";
 import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import CameraFeed from "../components/CameraFeed";
+
+// Custom Slider Component
+interface CustomSliderProps {
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (value: number) => void;
+  style?: React.CSSProperties;
+  showTicks?: boolean;
+}
+
+function CustomSlider({ min, max, step, value, onChange, style, showTicks = true }: CustomSliderProps) {
+  const range = max - min;
+  const progress = ((value - min) / range) * 100;
+
+  // Generate tick positions
+  const ticks = [];
+  for (let i = min; i <= max; i += step) {
+    ticks.push(i);
+  }
+
+  return (
+    <div style={{ position: "relative", width: "100%", ...style }}>
+      {/* Track background with dots */}
+      <div style={{
+        position: "relative",
+        height: "60px",
+        display: "flex",
+        alignItems: "center",
+        paddingLeft: "20px",
+        paddingRight: "20px"
+      }}>
+        {/* Gray background bar */}
+        <div style={{
+          position: "absolute",
+          left: "0px",
+          right: "0px",
+          height: "30px",
+          background: "#b0b0b0",
+          borderRadius: "16px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          zIndex: 1
+        }} />
+
+        {/* Tick dots */}
+        {showTicks && ticks.map((tick) => {
+          const tickProgress = ((tick - min) / range) * 100;
+          return (
+            <div
+              key={tick}
+              style={{
+                position: "absolute",
+                left: `calc(20px + ${tickProgress}% * (100% - 40px) / 100%)`,
+                top: "50%",
+                transform: "translate(-50%, -50%)",
+                width: "16px",
+                height: "16px",
+                backgroundColor: "#6b7280",
+                borderRadius: "50%",
+                zIndex: 2
+              }}
+            />
+          );
+        })}
+
+        {/* Active thumb (larger black circle) */}
+        <div
+          style={{
+            position: "absolute",
+            left: `calc(20px + ${progress}% * (100% - 40px) / 100%)`,
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "37px",
+            height: "37px",
+            backgroundColor: "#000000",
+            borderRadius: "50%",
+            zIndex: 3,
+            transition: "left 0.05s ease-out"
+          }}
+        />
+
+        {/* Hidden input range for interaction */}
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(parseInt(e.target.value))}
+          style={{
+            position: "absolute",
+            width: "100%",
+            height: "100%",
+            top: 0,
+            left: 0,
+            cursor: "pointer",
+            opacity: 0,
+            zIndex: 4
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function Admin() {
   const [scenario, setScenario] = useState<string | null>(null);
@@ -10,6 +117,9 @@ export default function Admin() {
   const [activeZones, setActiveZones] = useState(0);
   const [totalEvents, setTotalEvents] = useState(0);
   const [activeAlerts, setActiveAlerts] = useState(0);
+  const [cameraMenuOpen, setCameraMenuOpen] = useState(false); // track expanded camera selector
+  const [customDropdownOpen, setCustomDropdownOpen] = useState(false); // track custom dropdown state
+  const [scenarioDropdownOpen, setScenarioDropdownOpen] = useState(false); // track scenario dropdown state
   type Camera = {
     id: string;
     name: string;
@@ -46,6 +156,11 @@ export default function Admin() {
     }
     // do not auto-play when drawingLine turns false; user can manually resume
   }, [drawingLine]);
+
+  const handleLogout = () => {
+    // simple logout: navigate to home / login
+    window.location.href = "/";
+  };
 
   // make sure any playing videos are paused when the scenario stops; this is
   // mostly defensive since the camera object itself will be replaced (which
@@ -219,7 +334,7 @@ export default function Admin() {
 
     // If this specific camera is already running, stop it
     if (cameraRunning[cam.id]) {
-      fetch(`http://127.0.0.1:8000/cameras/stop?camera_id=${cam.id}`, { method: "POST" }).catch(() => {});
+      fetch(`http://127.0.0.1:8000/cameras/stop?camera_id=${cam.id}`, { method: "POST" }).catch(() => { });
       const saved = cameraRunning[cam.id].saved;
       setCameras(prev => prev.map(c => c.id === cam.id ? saved : c));
       setCameraRunning(prev => { const n = { ...prev }; delete n[cam.id]; return n; });
@@ -506,14 +621,14 @@ export default function Admin() {
                 <line
                   x1={linesPct[0].x} y1={linesPct[0].y}
                   x2={linesPct[1].x} y2={linesPct[1].y}
-                  stroke="#f59e0b" strokeWidth="0.4"
+                  stroke="#f59e0b" strokeWidth="0.6" // slightly thicker line
                 />
               )}
               {linesPct.map((p, i) => (
-                <circle key={i} cx={p.x} cy={p.y} r="0.8" fill="#f59e0b" />
+                <circle key={i} cx={p.x} cy={p.y} r="1.2" fill="#f59e0b" /> // larger anchor points
               ))}
               {restrictedPct && (
-                <circle cx={restrictedPct.x} cy={restrictedPct.y} r="1.2" fill="#ef4444" />
+                <circle cx={restrictedPct.x} cy={restrictedPct.y} r="1.8" fill="#ef4444" /> // bigger restricted point
               )}
               {/* Zone overlay */}
               {zonePct.length >= 2 && !zoneClosed && zonePct.map((p, i) => {
@@ -521,21 +636,21 @@ export default function Admin() {
                 return (
                   <line
                     key={i}
-                    x1={zonePct[i-1].x} y1={zonePct[i-1].y}
+                    x1={zonePct[i - 1].x} y1={zonePct[i - 1].y}
                     x2={p.x} y2={p.y}
-                    stroke="#f97316" strokeWidth="0.4" strokeDasharray="1,0.5"
+                    stroke="#f97316" strokeWidth="0.6" strokeDasharray="1,0.5" // thicker zonal edge
                   />
                 );
               })}
               {zonePct.map((p, i) => (
-                <circle key={`zp-${i}`} cx={p.x} cy={p.y} r="0.8" fill="#f97316" />
+                <circle key={`zp-${i}`} cx={p.x} cy={p.y} r="1.2" fill="#f97316" />
               ))}
               {zoneClosed && zonePct.length >= 3 && (
                 <polygon
                   points={zonePolyPts}
                   fill="rgba(239,68,68,0.25)"
                   stroke="#ef4444"
-                  strokeWidth="0.4"
+                  strokeWidth="0.6" // thicker closed zone border
                 />
               )}
             </svg>
@@ -627,7 +742,7 @@ export default function Admin() {
     if (camera.type === "webcam") {
       return (
         <div style={styles.cameraFeedContent} {...clickProps}>
-          <div style={{ fontSize: "24px", marginBottom: "10px" }}>🎥</div>
+          <div style={{ fontSize: "24px", marginBottom: "10px" }}></div>
           <p style={styles.cameraStatus}>{camera.source}</p>
         </div>
       );
@@ -672,26 +787,38 @@ export default function Admin() {
     }
     return withOverlay(
       <div style={styles.cameraFeedContent}>
-        <div style={styles.cameraIcon}>📹</div>
+        <div style={styles.cameraIcon}></div>
         <p style={styles.cameraStatus}>{camera.status}</p>
       </div>
     );
   };
 
   return (
-    <div style={styles.page}>
+    <motion.div
+      initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
+      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      transition={{ duration: 0.7, ease: "easeOut" }}
+      style={styles.page}
+    >
       {/* HEADER */}
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Smart Surveillance System</h1>
           <p style={styles.subtitle}>Real-time video analysis and event detection</p>
         </div>
-        <div style={styles.badge}>Inactive</div>
+        <div style={styles.headerRight}>
+          <div style={{
+            ...styles.badge,
+            background: status === "Running" ? "#16a34a" : "#dc2626",
+            color: "#ffffff"
+          }}>{status === "Running" ? "Active" : "Inactive"}</div>
+          <button style={styles.badge} onClick={handleLogout}>Logout</button>
+        </div>
       </div>
 
       {/* MONITOR ZONES SECTION */}
       <div style={styles.monitorZonesSection}>
-        <div style={styles.sectionTitle}>📍 Monitor Zones</div>
+        <div style={styles.sectionTitle}>Monitor Zones</div>
         <p style={styles.emptyText}>No zones defined</p>
       </div>
 
@@ -700,26 +827,13 @@ export default function Admin() {
         {/* LEFT VIDEO PANEL */}
         <div style={styles.videoPanel}>
           <div style={styles.videoPanelHeader}>
-            <div style={styles.panelTitle}>📷 Video Feed</div>
-            <div style={styles.videoControls}>
-              <select
-                style={styles.select}
-                value={selectedCamera || ""}
-                onChange={(e) => setSelectedCamera(e.target.value || null)}
-              >
-                <option value="">Select Camera</option>
-                {cameras.map(cam => (
-                  <option key={cam.id} value={cam.id}>{cam.name}</option>
-                ))}
-              </select>
-              <button style={styles.noCamera}>No Camera</button>
-            </div>
+            <div style={styles.panelTitle}>Video Feed</div>
           </div>
 
           {cameras.length === 0 ? (
             <div style={styles.viewer}>
               <div style={styles.viewerPlaceholder}>
-                <div style={styles.cameraIcon}>📹</div>
+                <div style={styles.cameraIcon}></div>
                 <p style={styles.placeholderText}>Select Camera or Video</p>
                 <p style={styles.placeholderSubtext}>Choose a camera or upload a video to begin</p>
               </div>
@@ -766,7 +880,7 @@ export default function Admin() {
                           handleRemoveCamera(cam.id);
                         }}
                       >
-                        ✕
+                        X
                       </button>
                     </div>
                   </div>
@@ -779,32 +893,207 @@ export default function Admin() {
 
         {/* RIGHT CONTROL PANEL */}
         <div style={styles.controlPanel}>
-          <div style={styles.panelTitle}>⚙ Control Panel</div>
+          <div style={styles.panelTitle}>Control Panel</div>
+
+          {/* metric summary tiles arranged fixed like reference image */}
+          <motion.div style={styles.metricsContainer} layout>
+            {/* row 1 */}
+            <div style={styles.metricsRow}>
+              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
+                <div style={styles.metricLabel}>Status</div>
+                <div style={styles.metricValue}>{status}</div>
+              </div>
+              <div
+                style={{
+                  ...styles.metricTile,
+                  width: "160px",
+                  height: "100px",
+                  background: "linear-gradient(0deg, #f87171, #dc2626)",
+                  cursor: "pointer"
+                }}
+                onClick={() => setCameraMenuOpen(open => !open)}
+              >
+                <div style={styles.metricLabel}>Select Camera</div>
+              </div>
+            </div>
+            <AnimatePresence mode="wait">
+              {cameraMenuOpen && (
+                <motion.div
+                  layoutId="camera-menu"
+                  style={{ ...styles.metricTile, flex: 1, background: "linear-gradient(0deg, #f87171, #dc2626)", marginTop: "12px", position: "relative" as const }}
+                  initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                  animate={{ opacity: 1, height: 100, marginTop: 12 }}
+                  exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                  transition={{ duration: 0.4, ease: "easeInOut" }}
+                >
+                  <motion.div
+                    style={{
+                      ...styles.customDropdown,
+                      height: customDropdownOpen ? "auto" : "auto"
+                    }}
+                  >
+                    <div style={styles.customDropdownField}>
+                      <input
+                        type="text"
+
+                        placeholder="Select a camera"
+                        value={selectedCamera ? cameras.find(c => c.id === selectedCamera)?.name : ""}
+                        readOnly
+                        style={styles.customDropdownInput}
+                        onClick={() => setCustomDropdownOpen(!customDropdownOpen)}
+                      />
+                      <span style={styles.customDropdownIcon}>▼</span>
+                    </div>
+
+                    <AnimatePresence>
+                      {customDropdownOpen && (
+                        <motion.div
+                          style={styles.customDropdownList}
+                          initial={{ opacity: 0, maxHeight: 0 }}
+                          animate={{ opacity: 1, maxHeight: 400 }}
+                          exit={{ opacity: 0, maxHeight: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <div
+                            style={{
+                              ...styles.customDropdownListItem,
+                              background: selectedCamera === null ? "rgba(255,255,255,0.2)" : "transparent",
+                              color: "white"
+                            }}
+                            onClick={() => {
+                              setSelectedCamera(null);
+                              setCameraMenuOpen(false);
+                              setCustomDropdownOpen(false);
+                            }}
+                          >
+                            (none)
+                          </div>
+                          {cameras.map(cam => (
+                            <div
+                              key={cam.id}
+                              style={{
+                                ...styles.customDropdownListItem,
+                                background: selectedCamera === cam.id ? "rgba(255,255,255,0.2)" : "transparent",
+                                color: "white"
+                              }}
+                              onClick={() => {
+                                setSelectedCamera(cam.id);
+                                setCameraMenuOpen(false);
+                                setCustomDropdownOpen(false);
+                              }}
+                            >
+                              {cam.name}
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {/* row 2 */}
+            <motion.div style={styles.metricsRow} layout>
+              <div style={{ ...styles.metricTile, width: "200px", height: "100px", background: "linear-gradient(180deg, #fb923c, #dc2626)" }}>
+                <div style={styles.metricLabel}>Active Zones</div>
+                <div style={styles.metricValue}>{activeZones}</div>
+              </div>
+              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #23bfbc, #006989)" }}>
+                <div style={styles.metricLabel}>Active Scenarios</div>
+                <div style={styles.metricValue}>{scenario ? scenario : "None"}</div>
+              </div>
+            </motion.div>
+            {/* row 3 */}
+            <motion.div style={styles.metricsRow} layout>
+              <div style={{ ...styles.metricTile, width: "100px", height: "100px", background: "linear-gradient(0deg, #6b7280, #38bdf8)" }}>
+                <div style={styles.metricLabel}>Total Events</div>
+                <div style={styles.metricValue}>{totalEvents}</div>
+              </div>
+              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #f87171, #dc2626)" }}>
+                <div style={styles.metricLabel}>Active Alerts</div>
+                <div style={styles.metricValue}>{activeAlerts}</div>
+              </div>
+            </motion.div>
+          </motion.div>
 
           {/* Select Scenario */}
           <div style={styles.controlSection}>
             <label style={styles.label}>Select Scenario</label>
-            <select
-              style={styles.scenarioSelect}
-              value={scenario || ""}
-              onChange={(e) => {
-                setScenario(e.target.value || null);
-                // reset any previous line configuration when scenario changes
-                setLinePoints([]);
-                setRestrictedPoint(null);
-              }}
-            >
-              <option value="">Choose a scenario</option>
-              <option value="behavior">Behavior Detection</option>
-              <option value="metro_line">Line Crossing</option>
-              <option value="zone_detection">Zone Detection</option>
-            </select>
+            <div style={{ position: "relative" as const }}>
+              <div
+                style={{
+                  ...styles.scenarioSelect,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+                onClick={() => setScenarioDropdownOpen(!scenarioDropdownOpen)}
+              >
+                <span>{scenario ? ({ behavior: "Behavior Detection", metro_line: "Line Crossing", zone_detection: "Zone Detection" } as Record<string, string>)[scenario] || scenario : "Choose a scenario"}</span>
+                <span style={{ fontSize: 20, color: "#9ca3af", marginLeft: 8 }}>▼</span>
+              </div>
+              <AnimatePresence>
+                {scenarioDropdownOpen && (
+                  <motion.div
+                    style={{
+                      position: "absolute" as const,
+                      top: "100%",
+                      left: 0,
+                      right: 0,
+                      background: "#ffffff",
+                      borderRadius: "10px",
+                      border: "1px solid #e5e7eb",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                      zIndex: 9999,
+                      overflow: "hidden",
+                      marginTop: "6px",
+                    }}
+                    initial={{ opacity: 0, maxHeight: 0 }}
+                    animate={{ opacity: 1, maxHeight: 400 }}
+                    exit={{ opacity: 0, maxHeight: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {[
+                      { value: "", label: "Choose a scenario" },
+                      { value: "behavior", label: "Behavior Detection" },
+                      { value: "metro_line", label: "Line Crossing" },
+                      { value: "zone_detection", label: "Zone Detection" },
+                    ].map((opt) => (
+                      <div
+                        key={opt.value}
+                        style={{
+                          padding: "12px 16px",
+                          fontSize: "18px",
+                          cursor: "pointer",
+                          background: scenario === opt.value || (!scenario && opt.value === "") ? "#f0f0f0" : "transparent",
+                          color: "#1a1a1a",
+                          fontWeight: scenario === opt.value ? 600 : 400,
+                          borderBottom: "1px solid #f0f0f0",
+                          transition: "background 0.15s ease",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f5f5")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = scenario === opt.value || (!scenario && opt.value === "") ? "#f0f0f0" : "transparent")}
+                        onClick={() => {
+                          setScenario(opt.value || null);
+                          setLinePoints([]);
+                          setRestrictedPoint(null);
+                          setScenarioDropdownOpen(false);
+                        }}
+                      >
+                        {opt.label}
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* scenario-specific configuration */}
           {scenario === "metro_line" && (
             <div style={styles.controlSection}>
-              <p style={{ margin: "8px 0", fontSize: 14 }}>
+              <p style={{ margin: "8px 0", fontSize: 20 }}>
                 {drawingLine
                   ? "Click two points to draw the line, then a third point for the restricted side."
                   : "Press the button below to start defining the line on the selected camera feed."}
@@ -837,10 +1126,19 @@ export default function Admin() {
             </div>
           )}
 
-          {/* Start/Stop Button */}
-          <button style={styles.startButton} onClick={handleStartScenario}>
-            {status === "Running" ? "■ Stop" : "▶ Start"}
-          </button>
+          {/* Start/Stop Button and Draw Zone Button in single row */}
+          <div style={styles.buttonRow}>
+            <button style={styles.startButton} onClick={handleStartScenario}>
+              {status === "Running" ? "■ Stop" : "▶ Start"}
+            </button>
+
+            {/* Draw Zone Button — shown only when no zone scenario active */}
+            {scenario !== "zone_detection" && (
+              <button style={styles.drawZoneButton}>
+                Draw New Zone
+              </button>
+            )}
+          </div>
 
           {/* Zone drawing UI */}
           {scenario === "zone_detection" && (
@@ -884,57 +1182,27 @@ export default function Admin() {
             </div>
           )}
 
-          {/* Draw Zone Button — shown only when no zone scenario active */}
-          {scenario !== "zone_detection" && (
-            <button style={styles.drawZoneButton}>
-              ✏ Draw New Zone
-            </button>
-          )}
 
-          {/* Status Info */}
-          <div style={styles.statusBox}>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Status:</span>
-              <span style={styles.statusValue}>{status}</span>
-            </div>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Active Scenario:</span>
-              <span style={styles.statusValue}>{scenario ? scenario.charAt(0).toUpperCase() + scenario.slice(1) : "None"}</span>
-            </div>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Active Zones:</span>
-              <span style={styles.statusValue}>{activeZones}</span>
-            </div>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Total Events:</span>
-              <span style={styles.statusValue}>{totalEvents}</span>
-            </div>
-            <div style={styles.statusRow}>
-              <span style={styles.statusLabel}>Active Alerts:</span>
-              <span style={{ ...styles.statusValue, color: "#ef4444" }}>{activeAlerts}</span>
-            </div>
-          </div>
         </div>
 
         {/* THRESHOLD SETTINGS */}
         <div style={styles.thresholdSection}>
-          <div style={styles.panelTitle}>📊 Threshold Settings</div>
+          <div style={styles.panelTitle}>Threshold Settings</div>
 
           <div style={styles.thresholdControl}>
             <label style={styles.thresholdLabel}>Inference Quality</label>
             {/* Slider: 1=Quality, 2=Balanced, 3=Performance */}
             <div style={styles.sliderContainer}>
-              <span style={{ fontSize: 11, color: "#9ca3af", minWidth: 64 }}>Performance</span>
-              <input
-                type="range"
-                min="1"
-                max="3"
-                step="1"
+
+              <CustomSlider
+                min={1}
+                max={3}
+                step={1}
                 value={4 - inferEvery}
-                onChange={(e) => setInferEvery(4 - parseInt(e.target.value))}
-                style={styles.slider}
+                onChange={(val) => setInferEvery(4 - val)}
+                style={{ flex: 1 }}
               />
-              <span style={{ fontSize: 11, color: "#9ca3af", minWidth: 48, textAlign: "right" }}>Quality</span>
+
             </div>
             {/* Tick labels */}
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
@@ -942,7 +1210,8 @@ export default function Admin() {
                 <span
                   key={label}
                   style={{
-                    fontSize: 10,
+                    fontSize: 18,
+                    fontFamily: "Google Sans Medium",
                     fontWeight: (4 - inferEvery) === i + 1 ? 700 : 400,
                     color: (4 - inferEvery) === i + 1 ? "#06b6d4" : "#6b7280",
                     cursor: "pointer",
@@ -957,24 +1226,25 @@ export default function Admin() {
             </div>
             <p style={styles.thresholdDescription}>
               {inferEvery === 1 ? "Every frame — highest accuracy, most GPU load" :
-               inferEvery === 2 ? "Every 2nd frame — balanced accuracy and load" :
-               "Every 3rd frame — lightest load, boxes persist between frames"}
+                inferEvery === 2 ? "Every 2nd frame — balanced accuracy and load" :
+                  "Every 3rd frame — lightest load, boxes persist between frames"}
             </p>
           </div>
 
           <div style={styles.thresholdControl}>
             <label style={styles.thresholdLabel}>Loitering Threshold</label>
             <div style={styles.sliderContainer}>
-              <input
-                type="range"
-                min="5"
-                max="30"
-                step="1"
+              <span style={{ minWidth: 64 }} />
+              <CustomSlider
+                min={5}
+                max={30}
+                step={1}
                 value={loiteringThreshold}
-                onChange={(e) => setLoiteringThreshold(parseInt(e.target.value))}
-                style={styles.slider}
+                onChange={(val) => setLoiteringThreshold(val)}
+                style={{ flex: 1 }}
+                showTicks={false}
               />
-              <span style={styles.thresholdValue}>{loiteringThreshold}s</span>
+              <span style={{ ...styles.thresholdValue, minWidth: 48 }}>{loiteringThreshold}s</span>
             </div>
             <p style={styles.thresholdDescription}>Time in seconds to detect loitering</p>
           </div>
@@ -988,10 +1258,10 @@ export default function Admin() {
         {/* RECORDED VIDEOS */}
         <div style={styles.bottomPanel}>
           <div style={styles.bottomPanelHeader}>
-            <div style={styles.panelTitle}>📹 Recorded Videos</div>
+            <div style={styles.panelTitle}>Recorded Videos</div>
             <div style={styles.bottomButtons}>
               <button style={styles.addButton} onClick={() => setShowAddCameraModal(true)}>+ Add Camera</button>
-              <button style={styles.uploadButton} onClick={handleUploadVideo}>↑ Upload Video</button>
+              <button style={styles.uploadButton} onClick={handleUploadVideo}>Upload Video</button>
             </div>
           </div>
 
@@ -1005,7 +1275,7 @@ export default function Admin() {
 
         {/* EVENT LOG */}
         <div style={styles.bottomPanel}>
-          <div style={styles.panelTitle}>📋 Event Log</div>
+          <div style={styles.panelTitle}>Event Log</div>
           <p style={styles.emptyText2}>Recent surveillance events</p>
           <p style={styles.emptyText}>No events recorded</p>
         </div>
@@ -1030,7 +1300,7 @@ export default function Admin() {
                 style={styles.modalCloseButton}
                 onClick={() => setShowAddCameraModal(false)}
               >
-                ✕
+                X
               </button>
             </div>
 
@@ -1108,7 +1378,7 @@ export default function Admin() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -1116,18 +1386,18 @@ export default function Admin() {
 
 const styles: any = {
   page: {
-    background: "#0a0e27",
+    background: "#0c0c0c",
     minHeight: "100vh",
     color: "#e5e7eb",
-    padding: "20px",
-    fontFamily: "Inter, -apple-system, system-ui"
+    padding: "24px",
+    fontFamily: "Google Sans Medium"
   },
 
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "25px"
+    marginBottom: "28px"
   },
 
   title: {
@@ -1140,33 +1410,35 @@ const styles: any = {
   subtitle: {
     margin: "5px 0 0 0",
     fontSize: "14px",
-    opacity: 0.6,
-    color: "#9ca3af"
+    color: "#888888"
   },
 
   badge: {
-    background: "#111827",
-    padding: "8px 16px",
-    borderRadius: "20px",
-    border: "1px solid #374151",
-    fontSize: "13px",
+    background: "#ffffff",
+    padding: "8px 18px",
+    borderRadius: "24px",
+    border: "none",
+    fontSize: "25px",
+    fontFamily: "Google Sans, sans-serif",
     fontWeight: "500",
-    color: "#9ca3af"
+    color: "#1a1a1a",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
   },
 
   monitorZonesSection: {
-    background: "#111827",
-    borderRadius: "12px",
-    padding: "20px",
-    border: "1px solid #1f2937",
-    marginBottom: "20px"
+    background: "#ffffff",
+    borderRadius: "16px",
+    padding: "22px",
+    border: "1px solid #e5e7eb",
+    marginBottom: "20px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
   },
 
   sectionTitle: {
     fontWeight: "600",
     marginBottom: "15px",
-    color: "#60a5fa",
-    fontSize: "15px"
+    color: "#1a1a1a",
+    fontSize: "30px"
   },
 
   mainGrid: {
@@ -1178,39 +1450,42 @@ const styles: any = {
   },
 
   videoPanel: {
-    background: "#111827",
-    borderRadius: "12px",
-    padding: "15px",
-    border: "1px solid #1f2937",
-    gridRow: "1 / 3"
+    background: "#ffffff",
+    borderRadius: "16px",
+    padding: "18px",
+    border: "1px solid #e5e7eb",
+    gridRow: "1 / 3",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
   },
 
   controlPanel: {
-    background: "#111827",
-    borderRadius: "12px",
-    padding: "20px",
-    border: "1px solid #1f2937",
+    background: "#ffffff",
+    borderRadius: "16px",
+    padding: "22px",
+    border: "1px solid #e5e7eb",
     gridRow: "1",
     gridColumn: "2",
-    height: "fit-content"
+    height: "fit-content",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
   },
 
   thresholdSection: {
-    background: "#111827",
-    borderRadius: "12px",
-    padding: "20px",
-    border: "1px solid #1f2937",
+    background: "#ffffff",
+    borderRadius: "16px",
+    padding: "22px",
+    border: "1px solid #e5e7eb",
     gridRow: "2",
     gridColumn: "2",
     height: "fit-content",
-    marginBottom: "0"
+    marginBottom: "0",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
   },
 
   panelTitle: {
     fontWeight: "600",
     marginBottom: "15px",
-    color: "#60a5fa",
-    fontSize: "15px"
+    color: "#1a1a1a",
+    fontSize: "35px"
   },
 
   controlSection: {
@@ -1219,65 +1494,76 @@ const styles: any = {
 
   label: {
     fontSize: "13px",
-    opacity: 0.7,
+    color: "#6b7280",
     display: "block",
     marginBottom: "8px"
   },
 
   scenarioSelect: {
     width: "100%",
-    padding: "10px",
-    borderRadius: "6px",
-    border: "1px solid #374151",
-    background: "#1f2937",
-    color: "#e5e7eb",
+    padding: "10px 12px",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
+    background: "#f5f5f5",
+    color: "#1a1a1a",
     fontSize: "13px",
-    cursor: "pointer"
+    cursor: "pointer",
+    outline: "none"
+  },
+
+  buttonRow: {
+    display: "flex",
+    gap: "12px",
+    marginBottom: "0px"
+
   },
 
   startButton: {
-    width: "100%",
-    padding: "12px",
-    borderRadius: "6px",
+    flex: 1,
+    padding: "20px",
+    borderRadius: "20px",
     border: "none",
-    background: "#06b6d4",
+    background: "#1a1a1a",
     color: "white",
-    fontWeight: "600",
+    fontFamily: "Google Sans, sans-serif",
+    fontWeight: "500",
     cursor: "pointer",
-    fontSize: "14px",
-    marginBottom: "10px"
+    fontSize: "19px",
+    transition: "background 0.2s ease"
   },
 
   drawZoneButton: {
-    width: "100%",
-    padding: "12px",
-    borderRadius: "6px",
-    border: "1px solid #374151",
+    flex: 1,
+    padding: "20px",
+    borderRadius: "20px",
+    border: "1px solid #e5e7eb",
     background: "transparent",
-    color: "#06b6d4",
+    color: "#1a1a1a",
+    fontFamily: "Google Sans, sans-serif",
     fontWeight: "500",
     cursor: "pointer",
-    fontSize: "14px",
-    marginBottom: "15px"
+    fontSize: "19px",
+    transition: "background 0.2s ease"
   },
 
   smallButton: {
-    padding: "8px 12px",
-    borderRadius: "5px",
+    padding: "8px 14px",
+    borderRadius: "8px",
     border: "none",
-    background: "#2563eb",
+    background: "#1a1a1a",
     color: "white",
     cursor: "pointer",
     fontSize: "13px",
-    margin: "6px 0"
+    margin: "6px 0",
+    fontWeight: "500"
   },
 
   statusBox: {
     marginTop: "20px",
-    padding: "15px",
-    borderRadius: "8px",
-    background: "#0f172a",
-    border: "1px solid #1f2937"
+    padding: "16px",
+    borderRadius: "12px",
+    background: "#f8f8f8",
+    border: "1px solid #e5e7eb"
   },
 
   statusRow: {
@@ -1289,24 +1575,68 @@ const styles: any = {
   },
 
   statusLabel: {
-    opacity: 0.7,
-    color: "#9ca3af"
+    color: "#6b7280"
   },
 
   statusValue: {
-    fontWeight: "500",
-    color: "#e5e7eb"
+    fontWeight: "600",
+    color: "#1a1a1a"
   },
 
-  thresholdSection: {
-    background: "#111827",
-    borderRadius: "12px",
-    padding: "20px",
-    border: "1px solid #1f2937",
-    gridRow: "2",
-    gridColumn: "2",
-    height: "fit-content",
-    marginBottom: "0"
+  // new metric tile styles
+  metricsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+    gap: "12px",
+    margin: "20px 0"
+  },
+
+  metricTile: {
+    padding: "12px 16px",
+    borderRadius: "20px",
+    color: "white",
+    display: "flex",
+    flexDirection: "column" as const,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "90px",
+    fontSize: "14px"
+  },
+
+  metricLabel: {
+    fontSize: "17px",
+    opacity: 0.9,
+    marginBottom: "4px",
+    textAlign: "center" as const
+  },
+
+  metricValue: {
+    fontSize: "26px",
+    fontWeight: 600,
+    textAlign: "center" as const
+  },
+
+  metricSelect: {
+    padding: "4px 8px",
+    borderRadius: "8px",
+    border: "none",
+    fontSize: "13px",
+    width: "100%",
+    textAlign: "center" as const,
+    background: "rgba(255,255,255,0.2)",
+    color: "white"
+  },
+
+  metricsContainer: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "12px",
+    margin: "20px 0"
+  },
+
+  metricsRow: {
+    display: "flex",
+    gap: "12px"
   },
 
   videoPanelHeader: {
@@ -1324,29 +1654,30 @@ const styles: any = {
 
   select: {
     padding: "8px 12px",
-    borderRadius: "6px",
-    border: "1px solid #374151",
-    background: "#1f2937",
-    color: "#e5e7eb",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
+    background: "#f5f5f5",
+    color: "#1a1a1a",
     fontSize: "13px",
     cursor: "pointer",
-    minWidth: "150px"
+    minWidth: "150px",
+    outline: "none"
   },
 
   noCamera: {
     padding: "8px 12px",
-    borderRadius: "6px",
-    border: "1px solid #374151",
-    background: "#020617",
-    color: "#e5e7eb",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
+    background: "#f5f5f5",
+    color: "#6b7280",
     fontSize: "13px",
     cursor: "pointer"
   },
 
   viewer: {
     height: "65vh",
-    background: "black",
-    borderRadius: "10px",
+    background: "#0a0a0a",
+    borderRadius: "14px",
     overflow: "hidden",
     display: "flex",
     alignItems: "center",
@@ -1360,9 +1691,9 @@ const styles: any = {
   },
 
   cameraFeed: {
-    background: "#020617",
-    borderRadius: "10px",
-    border: "1px solid #1f2937",
+    background: "#0a0a0a",
+    borderRadius: "14px",
+    border: "1px solid #e5e7eb",
     overflow: "hidden",
     minHeight: "250px",
     cursor: "pointer",
@@ -1373,15 +1704,15 @@ const styles: any = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "10px 12px",
-    background: "#111827",
-    borderBottom: "1px solid #1f2937"
+    padding: "10px 14px",
+    background: "#f8f8f8",
+    borderBottom: "1px solid #e5e7eb"
   },
 
   cameraName: {
     fontSize: "13px",
     fontWeight: "600",
-    color: "#e5e7eb"
+    color: "#1a1a1a"
   },
 
   removeButton: {
@@ -1396,7 +1727,7 @@ const styles: any = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: "4px",
+    borderRadius: "6px",
     transition: "background 0.2s"
   },
 
@@ -1417,9 +1748,8 @@ const styles: any = {
 
   videoStream: {
     width: "100%",
-    // height handled by wrapper's aspect-ratio style
     background: "black",
-    borderRadius: "8px",
+    borderRadius: "10px",
     objectFit: "cover" as const
   },
 
@@ -1429,7 +1759,9 @@ const styles: any = {
     left: 0,
     right: 0,
     bottom: 0,
-    background: "rgba(0, 0, 0, 0.7)",
+    background: "rgba(0, 0, 0, 0.6)",
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -1437,45 +1769,47 @@ const styles: any = {
   },
 
   modal: {
-    background: "#111827",
-    borderRadius: "12px",
-    border: "1px solid #1f2937",
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid #e5e7eb",
     width: "90%",
     maxWidth: "500px",
-    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3)"
+    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)"
   },
 
   modalHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "20px",
-    borderBottom: "1px solid #1f2937"
+    padding: "22px 24px",
+    borderBottom: "1px solid #f0f0f0"
   },
 
   modalTitle: {
     margin: "0",
     fontSize: "18px",
-    fontWeight: "600",
-    color: "#e5e7eb"
+    fontWeight: "700",
+    color: "#1a1a1a"
   },
 
   modalCloseButton: {
-    background: "transparent",
+    background: "#f5f5f5",
     border: "none",
-    color: "#9ca3af",
-    fontSize: "20px",
+    color: "#6b7280",
+    fontSize: "18px",
     cursor: "pointer",
     padding: "0",
     width: "32px",
     height: "32px",
     display: "flex",
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    borderRadius: "10px",
+    transition: "background 0.2s"
   },
 
   modalBody: {
-    padding: "20px"
+    padding: "24px"
   },
 
   formGroup: {
@@ -1487,70 +1821,75 @@ const styles: any = {
     fontSize: "13px",
     fontWeight: "600",
     marginBottom: "8px",
-    color: "#e5e7eb"
+    color: "#1a1a1a"
   },
 
   formInput: {
     width: "100%",
-    padding: "10px",
-    borderRadius: "6px",
-    border: "1px solid #374151",
-    background: "#1f2937",
-    color: "#e5e7eb",
+    padding: "11px 14px",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
+    background: "#f5f5f5",
+    color: "#1a1a1a",
     fontSize: "13px",
-    boxSizing: "border-box" as const
+    boxSizing: "border-box" as const,
+    outline: "none",
+    transition: "border-color 0.2s ease"
   },
 
   formSelect: {
     width: "100%",
-    padding: "10px",
-    borderRadius: "6px",
-    border: "1px solid #374151",
-    background: "#1f2937",
-    color: "#e5e7eb",
+    padding: "11px 14px",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
+    background: "#f5f5f5",
+    color: "#1a1a1a",
     fontSize: "13px",
     cursor: "pointer",
-    boxSizing: "border-box" as const
+    boxSizing: "border-box" as const,
+    outline: "none"
   },
 
   helpText: {
-    background: "#0f172a",
-    padding: "12px",
-    borderRadius: "6px",
+    background: "#f8f8f8",
+    padding: "14px",
+    borderRadius: "10px",
     marginBottom: "16px",
     fontSize: "12px",
-    color: "#9ca3af",
-    border: "1px solid #1f2937"
+    color: "#6b7280",
+    border: "1px solid #f0f0f0"
   },
 
   modalFooter: {
     display: "flex",
     gap: "10px",
     justifyContent: "flex-end",
-    padding: "16px 20px",
-    borderTop: "1px solid #1f2937"
+    padding: "18px 24px",
+    borderTop: "1px solid #f0f0f0"
   },
 
   cancelButton: {
-    padding: "10px 16px",
-    borderRadius: "6px",
-    border: "1px solid #374151",
+    padding: "10px 18px",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
     background: "transparent",
-    color: "#e5e7eb",
+    color: "#6b7280",
     fontWeight: "600",
     cursor: "pointer",
-    fontSize: "13px"
+    fontSize: "13px",
+    transition: "background 0.2s ease"
   },
 
   confirmButton: {
-    padding: "10px 16px",
-    borderRadius: "6px",
+    padding: "10px 18px",
+    borderRadius: "10px",
     border: "none",
-    background: "#06b6d4",
+    background: "#1a1a1a",
     color: "white",
     fontWeight: "600",
     cursor: "pointer",
-    fontSize: "13px"
+    fontSize: "13px",
+    transition: "background 0.2s ease"
   },
 
   viewerPlaceholder: {
@@ -1566,14 +1905,14 @@ const styles: any = {
   placeholderText: {
     margin: "0",
     fontSize: "18px",
-    color: "#6b7280",
+    color: "#9ca3af",
     fontWeight: "500"
   },
 
   placeholderSubtext: {
     margin: "8px 0 0 0",
     fontSize: "14px",
-    color: "#4b5563"
+    color: "#6b7280"
   },
 
   thresholdControl: {
@@ -1582,10 +1921,10 @@ const styles: any = {
 
   thresholdLabel: {
     display: "block",
-    fontSize: "13px",
+    fontSize: "18px",
     fontWeight: "500",
     marginBottom: "10px",
-    color: "#e5e7eb"
+    color: "#1a1a1a"
   },
 
   sliderContainer: {
@@ -1595,42 +1934,60 @@ const styles: any = {
     marginBottom: "8px"
   },
 
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12
+  },
+
   slider: {
     flex: 1,
     height: "6px",
     borderRadius: "3px",
-    background: "#1f2937",
+    background: "#e5e7eb",
     outline: "none",
     cursor: "pointer",
     WebkitAppearance: "none" as any,
     appearance: "none" as any
   },
+  logoutBtn: {
+    background: "#ffffff",
+    padding: "8px 18px",
+    borderRadius: "24px",
+    border: "none",
+    color: "#1a1a1a",
+    fontSize: 14,
+    fontWeight: 500,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+    cursor: "pointer"
+  },
 
   thresholdValue: {
     fontSize: "13px",
     fontWeight: "600",
-    color: "#60a5fa",
-    minWidth: "50px",
+    color: "#1a1a1a",
+    minWidth: "48px",
     textAlign: "right"
   },
 
   thresholdDescription: {
     margin: "6px 0 0 0",
     fontSize: "12px",
-    opacity: 0.6,
     color: "#9ca3af"
   },
 
   updateButton: {
     width: "100%",
-    padding: "12px",
-    borderRadius: "6px",
+    padding: "25px",
+    borderRadius: "20px",
     border: "none",
-    background: "#06b6d4",
+    background: "#1a1a1a",
     color: "white",
-    fontWeight: "600",
+    fontFamily: "Google Sans, sans-serif",
+    fontWeight: "500",
     cursor: "pointer",
-    fontSize: "14px"
+    fontSize: "20px",
+    transition: "background 0.2s ease"
   },
 
   bottomGrid: {
@@ -1641,10 +1998,11 @@ const styles: any = {
   },
 
   bottomPanel: {
-    background: "#111827",
-    borderRadius: "12px",
-    padding: "20px",
-    border: "1px solid #1f2937"
+    background: "#ffffff",
+    borderRadius: "16px",
+    padding: "22px",
+    border: "1px solid #e5e7eb",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
   },
 
   bottomPanelHeader: {
@@ -1660,32 +2018,34 @@ const styles: any = {
   },
 
   addButton: {
-    padding: "8px 14px",
-    borderRadius: "6px",
+    padding: "8px 16px",
+    borderRadius: "10px",
     border: "none",
-    background: "#06b6d4",
+    background: "#1a1a1a",
     color: "white",
     fontWeight: "600",
     cursor: "pointer",
-    fontSize: "12px"
+    fontSize: "12px",
+    transition: "background 0.2s ease"
   },
 
   uploadButton: {
-    padding: "8px 14px",
-    borderRadius: "6px",
-    border: "none",
-    background: "#10b981",
-    color: "white",
+    padding: "8px 16px",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
+    background: "transparent",
+    color: "#1a1a1a",
     fontWeight: "600",
     cursor: "pointer",
-    fontSize: "12px"
+    fontSize: "12px",
+    transition: "background 0.2s ease"
   },
 
   tabsContainer: {
     display: "flex",
-    gap: "10px",
+    gap: "12px",
     marginBottom: "15px",
-    borderBottom: "1px solid #1f2937",
+    borderBottom: "1px solid #f0f0f0",
     paddingBottom: "10px"
   },
 
@@ -1693,11 +2053,11 @@ const styles: any = {
     padding: "6px 0",
     background: "transparent",
     border: "none",
-    color: "#e5e7eb",
+    color: "#1a1a1a",
     fontSize: "13px",
-    fontWeight: "500",
+    fontWeight: "600",
     cursor: "pointer",
-    borderBottom: "2px solid #60a5fa",
+    borderBottom: "2px solid #1a1a1a",
     paddingBottom: "8px"
   },
 
@@ -1705,7 +2065,7 @@ const styles: any = {
     padding: "6px 0",
     background: "transparent",
     border: "none",
-    color: "#6b7280",
+    color: "#9ca3af",
     fontSize: "13px",
     fontWeight: "500",
     cursor: "pointer",
@@ -1715,14 +2075,121 @@ const styles: any = {
   emptyText: {
     margin: "20px 0",
     fontSize: "13px",
-    opacity: 0.5,
     color: "#9ca3af"
+  },
+
+  customDropdown: {
+    width: "100%",
+    position: "relative" as const
+  },
+
+  customDropdownField: {
+    position: "relative" as const,
+    width: "100%",
+    color: "black"
+  },
+
+  customDropdownInput: {
+    width: "100%",
+    padding: "10px 14px",
+    borderRadius: "8px",
+    border: "none",
+    background: "rgba(255,255,255,0.2)",
+    color: "white",
+    fontSize: "13px",
+    cursor: "pointer",
+    outline: "none",
+    appearance: "none" as const,
+    paddingRight: "32px",
+    fontWeight: "500"
+  },
+
+  customDropdownIcon: {
+    position: "absolute" as const,
+    right: "12px",
+    top: "50%",
+    transform: "translateY(-50%)",
+    color: "rgba(255,255,255,0.6)",
+    fontSize: "11px",
+    pointerEvents: "none" as const
+  },
+
+  customDropdownList: {
+    position: "absolute" as const,
+    top: "100%",
+    left: 0,
+    right: 0,
+    background: "linear-gradient(135deg, #f87171, #dc2626)",
+    borderRadius: "8px",
+    border: "1px solid rgba(255,255,255,0.2)",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+    zIndex: 9999,
+    overflow: "hidden",
+    marginTop: "6px"
+  },
+
+  customDropdownListItem: {
+    padding: "10px 14px",
+    border: "none",
+    background: "transparent",
+    color: "rgba(255,255,255,0.8)",
+    fontSize: "13px",
+    cursor: "pointer",
+    textAlign: "left" as const,
+    transition: "all 0.15s ease",
+    borderBottom: "1px solid rgba(255,255,255,0.1)",
+    fontWeight: "400",
+    display: "flex",
+    alignItems: "center"
+  },
+
+  customDropdownButton: {
+    width: "100%",
+    padding: "10px 14px",
+    borderRadius: "8px",
+    border: "1px solid rgba(255,255,255,0.3)",
+    background: "rgba(255,255,255,0.1)",
+    color: "white",
+    fontSize: "13px",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    transition: "all 0.2s ease",
+    fontWeight: "500",
+    marginBottom: "6px"
+  },
+
+  customDropdownOptions: {
+    position: "absolute" as const,
+    top: "100%",
+    left: 0,
+    right: 0,
+    background: "#ef4444",
+    borderRadius: "8px",
+    border: "1px solid rgba(255,255,255,0.2)",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+    zIndex: 10,
+    overflow: "hidden"
+  },
+
+  customDropdownOption: {
+    width: "100%",
+    padding: "10px 14px",
+    border: "none",
+    background: "transparent",
+    color: "white",
+    fontSize: "13px",
+    cursor: "pointer",
+    textAlign: "left" as const,
+    transition: "background 0.15s ease",
+    borderBottom: "1px solid rgba(255,255,255,0.1)",
+    fontWeight: "500"
   },
 
   emptyText2: {
     margin: "0 0 10px 0",
     fontSize: "12px",
-    opacity: 0.6,
     color: "#9ca3af"
   }
 };

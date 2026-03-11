@@ -87,7 +87,7 @@ export default function Home() {
         const cctvOffset = Math.max(20, Math.min(60, 5 * vw))
         const bodyHeight = Math.max(20, Math.min(40, 4 * vw))
         const pivotX = Math.min(10, 2 * vw)
-        
+
         // CCTV lens pivot: left: cctvOffset + transformOrigin, top: cctvOffset + center of bodyHeight
         const pivotPageX = cctvOffset + pivotX
         const pivotPageY = cctvOffset + (bodyHeight / 2)
@@ -537,8 +537,8 @@ const styles: any = {
     position: "absolute",
     right: "clamp(-2px, -0.5vw, -6px)",
     top: "clamp(1px, 0.4vw, 4px)",
-    width: "clamp(14px, 2.5vw, 28px)",
-    height: "clamp(14px, 2.5vw, 28px)",
+    width: "clamp(22px, 2.5vw, 28px)",
+    height: "clamp(22px, 2.5vw, 28px)",
     backgroundColor: "#020617",
     borderRadius: "50%",
     border: "clamp(1px, 0.3vw, 3px) solid #64748b",
@@ -573,7 +573,7 @@ const styles: any = {
     left: "80px",
     width: "200vh",
     height: "1000px",
-    background: "linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0.4) 40%, transparent 85%)",
+    background: "linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0.4) 40%, transparent 100%)",
     clipPath: "polygon(0 520px, 100% 0%, 100% 100%)",
     transformOrigin: "0 520px",
     pointerEvents: "none",
@@ -602,10 +602,10 @@ const styles: any = {
   title: {
     fontSize: "clamp(3.5rem, 8vw, 9rem)",
     fontWeight: 700,
-    letterSpacing: "clamp(-2px, -0.5vw, -5px)",
+    letterSpacing: "clamp(-3px, -1vw, -7px)",
     marginTop: 0,
     marginBottom: 10,
-    fontFamily: "Rinter, sans-serif",
+    fontFamily: "Google Sans Bold, sans-serif",
     color: "#2a2a3a",
     textAlign: "center" as const
   },
@@ -815,8 +815,8 @@ const styles: any = {
   titleOverlay: {
     fontSize: "clamp(3.5rem, 8vw, 9rem)",
     fontWeight: 700,
-    letterSpacing: "clamp(-2px, -0.5vw, -5px)",
-    fontFamily: "Rinter, sans-serif",
+    letterSpacing: "clamp(-3px, -1vw, -7px)",
+    fontFamily: "Google Sans Bold, sans-serif",
     color: "#ffffff",
     margin: 0,
     marginBottom: 10,

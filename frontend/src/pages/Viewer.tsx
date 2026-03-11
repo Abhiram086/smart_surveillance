@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import CameraFeed from "../components/CameraFeed";
 
 type Camera = {
@@ -18,7 +19,20 @@ export default function Viewer() {
   ];
 
   const [selected, setSelected] = useState<Camera | null>(null);
-  const [tokens, setTokens] = useState<Record<string,string>>({}); // map cameraId->token
+  const [tokens, setTokens] = useState<Record<string, string>>({}); // map cameraId->token
+
+  // Ensure page background matches viewer container (hide decorative blobs)
+  React.useEffect(() => {
+    const prevBg = document.body.style.background;
+    document.body.style.background = "#0c0c0c";
+    const blobs = Array.from(document.querySelectorAll('.bg-blob')) as HTMLElement[];
+    const prevDisplays = blobs.map(b => b.style.display || "");
+    blobs.forEach(b => b.style.display = "none");
+    return () => {
+      document.body.style.background = prevBg;
+      blobs.forEach((b, i) => b.style.display = prevDisplays[i]);
+    };
+  }, []);
 
   // helper functions to start/stop processing for a given camera
   const startStream = (cam: Camera) => {
@@ -31,7 +45,7 @@ export default function Viewer() {
   const stopStream = (camId: string) => {
     const tok = tokens[camId];
     if (tok) {
-      fetch(`http://127.0.0.1:8000/stop?token=${tok}`, { method: "POST" }).catch(() => {});
+      fetch(`http://127.0.0.1:8000/stop?token=${tok}`, { method: "POST" }).catch(() => { });
       setTokens(prev => {
         const p = { ...prev };
         delete p[camId];
@@ -45,7 +59,7 @@ export default function Viewer() {
   useEffect(() => {
     return () => {
       Object.values(tokens).forEach(tok => {
-        fetch(`http://127.0.0.1:8000/stop?token=${tok}`, { method: "POST" }).catch(() => {});
+        fetch(`http://127.0.0.1:8000/stop?token=${tok}`, { method: "POST" }).catch(() => { });
       });
     };
   }, [tokens]);
@@ -89,7 +103,12 @@ export default function Viewer() {
 
   // ---------------- GRID VIEW ----------------
   return (
-    <div style={styles.container}>
+    <motion.div
+      initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
+      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      transition={{ duration: 0.6, ease: "easeOut" }}
+      style={styles.container}
+    >
       <h1 style={styles.heading}>Live Monitoring</h1>
 
       <div style={styles.grid}>
@@ -100,10 +119,10 @@ export default function Viewer() {
               key={cam.id}
               style={styles.card}
               onClick={() => {
-              // open and also ensure processing is running
-              if (!tokens[cam.id]) startStream(cam);
-              setSelected(cam);
-            }}
+                // open and also ensure processing is running
+                if (!tokens[cam.id]) startStream(cam);
+                setSelected(cam);
+              }}
             >
               <div style={styles.cardTitle}>{cam.name}</div>
 
@@ -140,102 +159,124 @@ export default function Viewer() {
           </div>
         );
       })}
-    </div>
+    </motion.div>
   );
 }
 
 const styles: any = {
 
   container: {
-    padding: 20,
+
+    maxWidth: 1200,
+    margin: "0 auto",
     minHeight: "100vh",
-    background: "#0f172a",
-    color: "white"
+    background: "#0c0c0c",
+    color: "white",
+    fontFamily: "Google Sans, Inter, -apple-system, system-ui",
+    boxSizing: "border-box"
   },
 
   heading: {
-    marginBottom: 20
+    marginBottom: 18,
+    fontSize: 60,
+    fontWeight: 700,
+    color: "#ffffff",
+    paddingLeft: 0
   },
 
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))",
-    gap: 18
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: 24
   },
 
   card: {
-    background: "#020617",
-    borderRadius: 12,
-    padding: 10,
+    background: "#ffffff",
+    borderRadius: 16,
+    padding: 18,
     cursor: "pointer",
-    border: "1px solid #1e293b",
-    transition: "0.15s"
+    border: "1px solid #e5e7eb",
+    transition: "all 0.18s ease",
+    boxShadow: "0 6px 18px rgba(2,6,23,0.08)"
   },
 
   cardTitle: {
     fontSize: 14,
-    marginBottom: 6,
-    color: "#94a3b8"
+    marginBottom: 12,
+    color: "#1a1a1a",
+    fontWeight: 600
   },
 
   feedWrapper: {
-    height: 260,
+    height: 300,
     overflow: "hidden",
-    borderRadius: 8
+    borderRadius: 12,
+    marginTop: 6
   },
 
   preview: {
     height: "100%",
-    background: "#111827",
+    background: "#0a0a0a",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#475569",
-    fontSize: 14
+    color: "#6b7280",
+    fontSize: 15,
+    borderRadius: 12,
+    padding: 18
   },
 
   fullscreen: {
     height: "100vh",
     display: "flex",
     flexDirection: "column",
-    background: "black"
+    background: "#0c0c0c"
   },
 
   topbar: {
-    padding: "12px 16px",
-    background: "#020617",
+    padding: "12px 20px",
+    background: "#111111",
     display: "flex",
     alignItems: "center",
-    gap: 16
+    gap: 12,
+    borderBottom: "1px solid #222222"
   },
 
   title: {
     color: "white",
-    fontSize: 16
+    fontSize: 18,
+    fontWeight: 600
   },
 
   backBtn: {
-    background: "#1e293b",
+    background: "#ffffff",
     border: "none",
-    color: "white",
-    padding: "6px 12px",
-    borderRadius: 6,
-    cursor: "pointer"
+    color: "#1a1a1a",
+    padding: "8px 14px",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontWeight: 600,
+    fontSize: 13,
+    transition: "background 0.18s ease"
   },
 
   streamBtn: {
     marginLeft: "auto",
-    padding: "6px 12px",
-    background: "#06b6d4",
-    border: "none",
-    borderRadius: 6,
+    padding: "10px 25px",
+    background: "#1a1a1a",
+    border: "1px solid #333333",
+    borderRadius: 10,
     color: "white",
     cursor: "pointer",
-    fontSize: 14
+    fontSize: 18,
+    fontFamily: "Google Sans, sans-serif",
+    fontWeight: "500",
+    transition: "background 0.2s ease"
   },
 
   singleFeed: {
     flex: 1,
-    background: "black"
+    background: "#0a0a0a",
+    padding: 16
   }
 };
