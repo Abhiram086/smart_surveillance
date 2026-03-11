@@ -6,14 +6,36 @@ import os
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
-def abs_path(relative_path: str):
-    """Convert project relative path -> absolute path"""
-    return os.path.join(PROJECT_ROOT, relative_path)
+def resolve_video_source(video_value):
+    """
+    Supports:
+    1. Webcam index (0,1,2...)
+    2. Relative video file path
+    """
+
+    # Webcam case
+    if isinstance(video_value, int):
+        print(f"[INFO] Using webcam index: {video_value}")
+        return video_value
+
+    # Video file case
+    if isinstance(video_value, str):
+
+        video_path = os.path.join(PROJECT_ROOT, video_value)
+
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video not found: {video_path}")
+
+        print(f"[INFO] Using video file: {video_path}")
+
+        return video_path
+
+    raise ValueError("Invalid video source in config")
 
 
-def run_pipeline(config_relative_path: str):
+def run_pipeline(config_relative_path):
 
-    config_path = abs_path(config_relative_path)
+    config_path = os.path.join(PROJECT_ROOT, config_relative_path)
 
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config not found: {config_path}")
@@ -22,25 +44,25 @@ def run_pipeline(config_relative_path: str):
         cfg = json.load(f)
 
     scenario = cfg["scenario"]
-    video = abs_path(cfg["video"])
-
-    if not os.path.exists(video):
-        raise FileNotFoundError(f"Video not found: {video}")
+    video_source = resolve_video_source(cfg["video"])
 
     if scenario == "LINE_CROSSING":
         from scenarios.line_crossing import run
+
     elif scenario == "BEHAVIOR":
         from scenarios.behavior import run
+
     else:
         raise ValueError(f"Unknown scenario: {scenario}")
 
-    run(video, cfg)
+    run(video_source, cfg)
 
 
-# allow terminal usage also
+# terminal usage
 if __name__ == "__main__":
+
     if len(sys.argv) < 2:
         print("Usage: python main.py <config_file>")
-        exit()
+        sys.exit()
 
     run_pipeline(sys.argv[1])
