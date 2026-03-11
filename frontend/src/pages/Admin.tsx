@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import React from "react";
 import CameraFeed from "../components/CameraFeed";
-
 
 export default function Admin() {
   const [scenario, setScenario] = useState<string | null>(null);
@@ -15,39 +14,12 @@ export default function Admin() {
     id: string;
     name: string;
     status: string;
-    source: string | number;      // URL used for display (blob, http) or numeric webcam index
+    source: string;              // URL used for display (blob or http)
     type: "ip" | "webcam" | "file";
     serverSource?: string;       // path that backend can open (for files)
   };
 
   const [cameras, setCameras] = useState<Camera[]>([]);
-
-  // fetch list of system webcams from backend
-  const fetchAvailableCameras = async () => {
-    try {
-      const resp = await fetch("http://127.0.0.1:8000/cameras");
-      if (resp.ok) {
-        const list: Array<{ id: number; name: string }> = await resp.json();
-        setCameras(prev => {
-          // keep any non-webcam cameras user added so they aren't lost
-          const userCams = prev.filter(c => c.type !== "webcam");
-          const webcams = list.map(c => ({
-            id: `webcam_${c.id}`,
-            name: c.name,
-            status: "Active",
-            source: c.id,         // numeric value is important so backend treats it as index
-            type: "webcam" as const,
-          }));
-          return [...webcams, ...userCams];
-        });
-        if (!selectedCamera && list.length > 0) {
-          setSelectedCamera(`webcam_${list[0].id}`);
-        }
-      }
-    } catch (err) {
-      console.error("failed to fetch available cameras", err);
-    }
-  };
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
   const [drawingLine, setDrawingLine] = useState(false);
   const [savedCamera, setSavedCamera] = useState<Camera | null>(null);
@@ -85,32 +57,6 @@ export default function Admin() {
       vids.forEach(v => v.pause());
     }
   }, [status]);
-
-  // when the selected camera changes we automatically start/stop preview
-  React.useEffect(() => {
-    if (!selectedCamera) {
-      // nothing selected, stop all running cameras
-      Object.keys(cameraRunning).forEach(id => {
-        fetch(`http://127.0.0.1:8000/cameras/stop?camera_id=${id}`, { method: "POST" }).catch(() => {});
-        setCameraRunning(prev => { const n = { ...prev }; delete n[id]; return n; });
-      });
-      return;
-    }
-
-    // stop others
-    Object.keys(cameraRunning).forEach(id => {
-      if (id !== selectedCamera) {
-        fetch(`http://127.0.0.1:8000/cameras/stop?camera_id=${id}`, { method: "POST" }).catch(() => {});
-        setCameraRunning(prev => { const n = { ...prev }; delete n[id]; return n; });
-      }
-    });
-
-    const cam = cameras.find(c => c.id === selectedCamera);
-    if (cam?.type === "webcam" && !cameraRunning[cam.id]) {
-      // start with a default scenario so we get a stream from backend
-      handleStartCameraScenario(cam, "behavior");
-    }
-  }, [selectedCamera]);
   const [showAddCameraModal, setShowAddCameraModal] = useState(false);
   const [newCameraName, setNewCameraName] = useState("");
   const [newCameraSource, setNewCameraSource] = useState("");
@@ -118,11 +64,6 @@ export default function Admin() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // scenario-specific helper state
-
-  // load available system cameras when the page loads
-  React.useEffect(() => {
-    fetchAvailableCameras();
-  }, []);
   const [linePoints, setLinePoints] = useState<Array<{ x: number; y: number }>>([]);
   const [restrictedPoint, setRestrictedPoint] = useState<{ x: number; y: number } | null>(null);
 
@@ -190,14 +131,14 @@ export default function Admin() {
     const cam = cameras.find(c => c.id === selectedCamera);
     if (!cam) return;
 
-    if (cam.type === "file" && !cam.serverSource && typeof cam.source === "string" && !cam.source.startsWith("blob:")) {
+    if (cam.type === "file" && !cam.serverSource && !cam.source.startsWith("blob:")) {
       alert("Please upload the video file via the upload button before starting a scenario.");
       setStatus("Idle");
       return;
     }
 
     // Resolve server-side video path
-    let videoParam: string | number | undefined;
+    let videoParam: string | undefined;
     if (cam.type === "file") {
       if (cam.serverSource) {
         videoParam = cam.serverSource;
@@ -216,18 +157,10 @@ export default function Admin() {
           console.error("failed to upload blob video", err);
         }
       } else {
-        videoParam = cam.source as string;
-      }
-    } else if (cam.type === "webcam") {
-      // numeric indexes should be sent as numbers so backend doesn't treat them
-      // as relative paths
-      if (typeof cam.source === "string" && cam.source.match(/^\d+$/)) {
-        videoParam = parseInt(cam.source, 10);
-      } else {
-        videoParam = cam.source as number;
+        videoParam = cam.source;
       }
     } else if (cam.source) {
-      videoParam = cam.source as string;
+      videoParam = cam.source;
     }
 
     // Build the /cameras/start request body
@@ -254,21 +187,13 @@ export default function Admin() {
         body: JSON.stringify(body),
       });
       if (!resp.ok) {
-        let errMsg = "Unknown error";
-        try {
-          const err = await resp.json();
-          errMsg = err.detail || JSON.stringify(err);
-        } catch {
-          errMsg = `HTTP ${resp.status}: ${resp.statusText}`;
-        }
-        alert(`Failed to start camera: ${errMsg}`);
+        const err = await resp.json();
+        alert(`Failed to start camera: ${err.detail}`);
         setStatus("Idle");
         return;
       }
-    } catch (err: any) {
-      const errMsg = err?.message || String(err);
+    } catch (err) {
       console.error("cameras/start failed", err);
-      alert(`Network error: ${errMsg}`);
       setStatus("Idle");
       return;
     }
@@ -286,14 +211,9 @@ export default function Admin() {
   };
 
   // Per-camera start/stop — independent of the global status/scenario
-  // starts or stops a camera; an optional *scen* parameter overrides the
-  // currently-selected scenario (used by the auto-preview effect).
-  const handleStartCameraScenario = async (cam: Camera, scen?: string) => {
-    const useScenario = scen || scenario;
-    if (!useScenario) {
-      if (!scen) {
-        alert("Please select a scenario first.");
-      }
+  const handleStartCameraScenario = async (cam: Camera) => {
+    if (!scenario) {
+      alert("Please select a scenario first.");
       return;
     }
 
@@ -307,17 +227,17 @@ export default function Admin() {
     }
 
     // Guard scenario-specific requirements
-    if (useScenario === "metro_line" && (linePoints.length < 2 || !restrictedPoint)) {
+    if (scenario === "metro_line" && (linePoints.length < 2 || !restrictedPoint)) {
       alert("Draw the line and restricted point first.");
       return;
     }
-    if (useScenario === "zone_detection" && (zonePoints.length < 3 || !zoneClosed)) {
+    if (scenario === "zone_detection" && (zonePoints.length < 3 || !zoneClosed)) {
       alert("Draw and close a zone first.");
       return;
     }
 
     // Resolve video param
-    let videoParam: string | number | undefined;
+    let videoParam: string | undefined;
     if (cam.type === "file") {
       if (cam.serverSource) {
         videoParam = cam.serverSource;
@@ -334,30 +254,24 @@ export default function Admin() {
           setCameras(prev => prev.map(c => c.id === cam.id ? { ...c, serverSource: videoParam } : c));
         } catch (err) { console.error("upload failed", err); }
       } else {
-        videoParam = cam.source as string;
-      }
-    } else if (cam.type === "webcam") {
-      if (typeof cam.source === "string" && cam.source.match(/^\d+$/)) {
-        videoParam = parseInt(cam.source, 10);
-      } else {
-        videoParam = cam.source as number;
+        videoParam = cam.source;
       }
     } else if (cam.source) {
-      videoParam = cam.source as string;
+      videoParam = cam.source;
     }
 
     const body: Record<string, string | number | undefined> = {
       camera_id: cam.id,
-      scenario: useScenario,
+      scenario,
       video: videoParam,
       infer_every: inferEvery,
     };
-    if (useScenario === "metro_line" && linePoints.length === 2 && restrictedPoint) {
+    if (scenario === "metro_line" && linePoints.length === 2 && restrictedPoint) {
       const [p1, p2] = linePoints;
       body.line = `${p1.x},${p1.y},${p2.x},${p2.y}`;
       body.restricted_point = `${restrictedPoint.x},${restrictedPoint.y}`;
     }
-    if (useScenario === "zone_detection" && zonePoints.length >= 3) {
+    if (scenario === "zone_detection" && zonePoints.length >= 3) {
       body.zone = zonePoints.map(p => `${p.x},${p.y}`).join(";");
     }
 
@@ -368,28 +282,20 @@ export default function Admin() {
         body: JSON.stringify(body),
       });
       if (!resp.ok) {
-        let errMsg = "Unknown error";
-        try {
-          const err = await resp.json();
-          errMsg = err.detail || JSON.stringify(err);
-        } catch {
-          errMsg = `HTTP ${resp.status}: ${resp.statusText}`;
-        }
-        alert(`Failed to start: ${errMsg}`);
+        const err = await resp.json();
+        alert(`Failed to start: ${err.detail}`);
         return;
       }
-    } catch (err: any) {
-      const errMsg = err?.message || String(err);
+    } catch (err) {
       console.error("cameras/start failed", err);
-      alert(`Network error: ${errMsg}`);
       return;
     }
 
     const streamUrl = `http://127.0.0.1:8000/cameras/stream/${cam.id}`;
-    setCameraRunning(prev => ({ ...prev, [cam.id]: { scenario: useScenario, saved: cam } }));
+    setCameraRunning(prev => ({ ...prev, [cam.id]: { scenario, saved: cam } }));
     setStreamStatus(prev => ({ ...prev, [cam.id]: "connecting" }));
     setCameras(prev => prev.map(c => c.id === cam.id
-      ? { ...c, source: streamUrl, type: "ip" as const, name: `[${useScenario}] ${c.name}` }
+      ? { ...c, source: streamUrl, type: "ip" as const, name: `[${scenario}] ${c.name}` }
       : c
     ));
   };
@@ -642,9 +548,8 @@ export default function Admin() {
     // if this is a backend MJPEG stream, use <img> since <video> cannot handle
     // multipart/x-mixed-replace type
     if (
-      typeof camera.source === "string" &&
       camera.source.startsWith("http") &&
-      (camera.source.includes("/stream/") || camera.source.includes("/cameras/stream/"))
+      camera.source.includes("/stream/") || camera.source.includes("/cameras/stream/")
     ) {
       // show status overlays for connecting/error
       const status = streamStatus[camera.id];
@@ -718,23 +623,12 @@ export default function Admin() {
         </div>
       );
     }
-    // For webcam devices before the backend preview has started, show a
-    // simple placeholder while the effect triggers the backend start. once
-    // the streamUrl is applied the camera will be converted to type "ip" and
-    // the earlier MJPEG logic will take over.
+    // For webcam or live feeds
     if (camera.type === "webcam") {
-      return withOverlay(
-        <div style={{
-          ...wrapperStyle,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#9ca3af",
-          fontSize: 14,
-        }}
-        {...clickProps}
-        >
-          Starting camera…
+      return (
+        <div style={styles.cameraFeedContent} {...clickProps}>
+          <div style={{ fontSize: "24px", marginBottom: "10px" }}>🎥</div>
+          <p style={styles.cameraStatus}>{camera.source}</p>
         </div>
       );
     }
@@ -812,14 +706,13 @@ export default function Admin() {
                 style={styles.select}
                 value={selectedCamera || ""}
                 onChange={(e) => setSelectedCamera(e.target.value || null)}
-                onFocus={fetchAvailableCameras}
               >
                 <option value="">Select Camera</option>
                 {cameras.map(cam => (
                   <option key={cam.id} value={cam.id}>{cam.name}</option>
                 ))}
               </select>
-              <button style={styles.noCamera} onClick={() => setSelectedCamera(null)}>No Camera</button>
+              <button style={styles.noCamera}>No Camera</button>
             </div>
           </div>
 
@@ -1300,17 +1193,6 @@ const styles: any = {
     gridRow: "1",
     gridColumn: "2",
     height: "fit-content"
-  },
-
-  thresholdSection: {
-    background: "#111827",
-    borderRadius: "12px",
-    padding: "20px",
-    border: "1px solid #1f2937",
-    gridRow: "2",
-    gridColumn: "2",
-    height: "fit-content",
-    marginBottom: "0"
   },
 
   panelTitle: {
