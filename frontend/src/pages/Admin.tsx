@@ -1470,15 +1470,14 @@ const styles: any = {
   },
 
   thresholdSection: {
-    background: "#ffffff",
-    borderRadius: "16px",
-    padding: "22px",
-    border: "1px solid #e5e7eb",
+    background: "#111827",
+    borderRadius: "12px",
+    padding: "20px",
+    border: "1px solid #1f2937",
     gridRow: "2",
     gridColumn: "2",
     height: "fit-content",
-    marginBottom: "0",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+    marginBottom: "0"
   },
 
   panelTitle: {
