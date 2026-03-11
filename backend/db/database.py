@@ -8,7 +8,15 @@ from collections.abc import Generator
 from psycopg2.extensions import connection
 from psycopg2.pool import SimpleConnectionPool
 
-DEFAULT_DATABASE_URL = "postgresql://surveillance_user:admin@localhost:5432/surveillance"
+# Load .env file if present (works on all platforms, silent if file missing)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed; rely on environment variables only
+
+# Matches the credentials in README and the database setup SQL
+DEFAULT_DATABASE_URL = "postgresql://surveillance_user:surveillance_pass@localhost:5432/surveillance"
 
 
 class DatabasePool:
