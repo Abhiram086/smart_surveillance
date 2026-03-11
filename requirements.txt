@@ -1,23 +1,31 @@
-# Server
+# ── Server ────────────────────────────────────────────────────────────────────
 fastapi
 uvicorn[standard]
+python-multipart          # required by FastAPI for UploadFile / File
 
-# AI / Vision
-ultralytics
-opencv-python
+# ── Database ──────────────────────────────────────────────────────────────────
+psycopg2-binary           # PostgreSQL driver (binary = no C compiler needed on Windows)
+python-dotenv             # loads backend/.env so DATABASE_URL is picked up automatically
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+passlib[bcrypt]           # password hashing
+pydantic                  # request/response models used in app.py
+
+# ── AI / Vision ───────────────────────────────────────────────────────────────
+torch                     # PyTorch — GPU used automatically if CUDA is available
+ultralytics               # YOLOv8 (downloads model weights on first run)
+opencv-python             # frame capture, drawing, JPEG encoding
 numpy
-scipy
-matplotlib
 
-# Tracking / Math
+# ── Tracking / Math ───────────────────────────────────────────────────────────
+scipy
 shapely
 filterpy
-lap
-imutils
+# lap removed — broken on Windows without a C compiler.
+# ultralytics falls back to scipy-based matching automatically.
 
-# Utilities
+# ── Utilities ─────────────────────────────────────────────────────────────────
 PyYAML
 requests
 pillow
 psutil
-polars
