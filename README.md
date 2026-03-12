@@ -17,6 +17,7 @@ Automatically uses **CPU or NVIDIA GPU (CUDA)**.
 - 👥 User authentication (Admin / Viewer)
 - ⚡ Automatic GPU usage if CUDA available
 - 📦 Automatic model download (no manual setup)
+- 🐳 One-command Docker setup (no manual installs)
 
 ---
 
@@ -43,9 +44,162 @@ MJPEG HTTP stream (no plugins required)
 
 ---
 
-# 🧰 Requirements
+# 🐳 Quick Start (Docker) — Recommended
 
-Install the following software:
+> No Python, Node.js, or PostgreSQL installation needed.  
+> Docker handles everything automatically.
+
+## Requirements
+
+| Software      | Version  |
+|---------------|----------|
+| Docker        | Latest   |
+| Docker Compose | Latest  |
+| Git           | Latest   |
+
+Optional:
+
+| Hardware   | Support  |
+|------------|----------|
+| NVIDIA GPU | CUDA 12+ |
+
+---
+
+## 1️⃣ Install Docker
+
+### Linux (Arch / CachyOS)
+```bash
+sudo pacman -S docker docker-compose
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+### Windows / Mac
+Download Docker Desktop: https://www.docker.com/products/docker-desktop
+
+---
+
+## 2️⃣ Clone Repository
+
+```bash
+git clone https://github.com/Abhiram086/smart_surveillance.git
+cd smart_surveillance
+```
+
+---
+
+## 3️⃣ Start Everything
+
+```bash
+docker compose up --build
+```
+
+That's it. Docker will:
+- Download and start PostgreSQL automatically
+- Install all Python dependencies
+- Build and serve the React frontend
+- Wire everything together
+
+First run takes ~5–10 minutes (downloads PyTorch base image).  
+Subsequent runs start in seconds.
+
+Open browser: **http://localhost:5173**
+
+---
+
+## 4️⃣ NVIDIA GPU Support (Optional)
+
+### Linux
+```bash
+sudo pacman -S nvidia-container-toolkit        # Arch / CachyOS
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+Then uncomment the GPU block in `docker-compose.yml`:
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu]
+```
+
+Rebuild:
+```bash
+docker compose up --build backend
+```
+
+### Windows
+Install NVIDIA Container Toolkit via WSL2 — see:  
+https://docs.nvidia.com/cuda/wsl-user-guide/index.html
+
+---
+
+## 🔧 Useful Commands
+
+```bash
+# Start in background
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop everything
+docker compose down
+
+# Rebuild after code changes
+docker compose up --build
+
+# Connect to database directly
+docker exec -it smss_db psql -U surveillance_user -d surveillance
+```
+
+---
+
+## 📹 USB / Webcam Passthrough (Linux)
+
+Find your camera devices:
+```bash
+ls /dev/video*
+```
+
+Uncomment and edit the `devices` block in `docker-compose.yml`:
+```yaml
+devices:
+  - /dev/video0:/dev/video0
+```
+
+Rebuild backend:
+```bash
+docker compose up --build backend
+```
+
+---
+
+## 🗄️ Database
+
+PostgreSQL runs inside Docker. Data persists across restarts in a named volume.
+
+To wipe the database and start fresh:
+```bash
+docker compose down -v
+docker compose up
+```
+
+---
+
+---
+
+# 🧰 Manual Setup (Without Docker)
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
+
+## Requirements
 
 | Software   | Version |
 |------------|---------|
@@ -54,15 +208,7 @@ Install the following software:
 | PostgreSQL | 14+     |
 | Git        | Latest  |
 
-Optional:
-
-| Hardware   | Support  |
-|------------|----------|
-| NVIDIA GPU | CUDA 11+ |
-
 ---
-
-# 🚀 Installation Guide
 
 ## 1️⃣ Clone Repository
 
@@ -72,8 +218,6 @@ cd smart_surveillance
 ```
 
 ---
-
-# 🐍 Backend Setup
 
 ## 2️⃣ Create Python Virtual Environment
 
@@ -104,96 +248,38 @@ YOLOv8n model (~6MB)
 
 ---
 
-# 🗄️ Database Setup (PostgreSQL)
+## 4️⃣ Database Setup (PostgreSQL)
 
-The system uses **PostgreSQL for user authentication**.
+Install PostgreSQL: https://www.postgresql.org/download/
 
----
-
-## 1️⃣ Install PostgreSQL
-
-Download:  
-[https://www.postgresql.org/download/](https://www.postgresql.org/download/)
-
-During installation remember the password for:
-```
-postgres
-```
-
----
-
-## 2️⃣ Create Database
-
-Open terminal or command prompt:
+Open terminal:
 ```bash
 psql -U postgres
 ```
 
-Run the following:
+Run:
 ```sql
 CREATE DATABASE surveillance;
 CREATE USER surveillance_user WITH PASSWORD 'surveillance_pass';
 GRANT ALL PRIVILEGES ON DATABASE surveillance TO surveillance_user;
-```
-
-Connect to the database:
-```sql
 \c surveillance
-```
-
-Grant schema permissions:
-```sql
 GRANT ALL ON SCHEMA public TO surveillance_user;
 ALTER SCHEMA public OWNER TO surveillance_user;
-```
-
-Exit:
-```sql
 \q
 ```
 
----
-
-## 3️⃣ Configure Environment Variables
-
-Create file:
-```
-backend/.env
-```
-
-Add:
+Create `backend/.env`:
 ```
 DATABASE_URL=postgresql://surveillance_user:surveillance_pass@localhost:5432/surveillance
 ```
 
----
-
-## 4️⃣ Initialize Database Tables
-
-From backend folder:
+Initialize tables:
 ```bash
 cd backend
 python -m db.init_db
 ```
 
-This creates the table:
-```
-users
-```
-
-Schema:
-```
-users
-├── id           SERIAL PRIMARY KEY
-├── username     TEXT UNIQUE
-├── password_hash TEXT
-├── role         TEXT
-└── created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-```
-
 ---
-
-# 🌐 Frontend Setup
 
 ## 5️⃣ Install Frontend Dependencies
 
@@ -202,47 +288,25 @@ cd frontend
 npm install
 ```
 
-(or)
-
-```bash
-pnpm install
-```
-
 ---
 
-# ▶️ Running The System
+## 6️⃣ Run the System
 
-You need **two terminals**.
-
----
-
-## Terminal 1 — Start Backend
-
+**Terminal 1 — Backend:**
 ```bash
 cd backend
 uvicorn app:app --reload --port 8000
 ```
 
-Backend runs at:
-```
-http://127.0.0.1:8000
-```
-
----
-
-## Terminal 2 — Start Web Dashboard
-
+**Terminal 2 — Frontend:**
 ```bash
 cd frontend
 npm run dev
 ```
 
-Open browser:
-```
-http://localhost:5173
-```
+Open browser: **http://localhost:5173**
 
-You should now see the surveillance dashboard 🎥
+</details>
 
 ---
 
@@ -262,36 +326,25 @@ Credentials are stored securely using **bcrypt hashing** in PostgreSQL.
 
 # 🎯 Running Detection Without Web UI
 
-You can run detectors via CLI.
-
-### Line Crossing
 ```bash
+# Line Crossing
 python main.py config/metro_line.json
-```
 
-### Restricted Zone
-```bash
+# Restricted Zone
 python main.py config/restricted_zone.json
-```
 
-### Behavior Detection
-```bash
+# Behavior Detection
 python main.py config/behavior.json
 ```
 
-Press **Q** to exit window.
+Press **Q** to exit.
 
 ---
 
 # 📹 Using Your Own Video
 
-Place videos inside:
-```
-videos/
-```
-
-Edit config file. Example:
-```
+Place videos inside `videos/` and edit the config file:
+```json
 "video": "videos/myvideo.mp4"
 ```
 
@@ -299,12 +352,6 @@ Edit config file. Example:
 
 # 🖥️ Using Webcam
 
-Use:
-```
-"video": 0
-```
-
-Example:
 ```json
 {
   "scenario": "BEHAVIOR",
@@ -316,8 +363,7 @@ Example:
 
 # ⚙️ GPU Support
 
-The system automatically detects CUDA.
-
+The system automatically detects CUDA:
 ```
 CUDA available → GPU used
 No CUDA        → CPU used
@@ -338,9 +384,10 @@ smart_surveillance/
 ├── config/           Scenario configuration files
 ├── frontend/         React dashboard
 ├── videos/           Sample videos
-├── db/               Database initialization
 ├── main.py           CLI detection runner
-└── requirements.txt
+├── requirements.txt
+├── docker-compose.yml
+└── .dockerignore
 ```
 
 ---
@@ -359,8 +406,6 @@ smart_surveillance/
 
 # ⚠️ Known Limitations (WIP)
 
-- Multi-camera support coming soon
-- Config drawing UI not implemented
 - Alert notifications not implemented
 
 ---
@@ -368,25 +413,25 @@ smart_surveillance/
 # 🛠️ Troubleshooting
 
 ## Webcam not opening
-Close applications using camera:
-```
-Zoom
-Teams
-Browser tabs
-```
-
----
+Close applications using camera (Zoom, Teams, browser tabs).
 
 ## Port already in use
-Change backend port:
-```bash
-uvicorn app:app --reload --port 8001
+Change port mapping in `docker-compose.yml`:
+```yaml
+ports:
+  - "5174:80"   # change left side only
 ```
 
----
+## GPU not detected in Docker (Linux)
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
 
-## Model downloads every run
-Ensure internet connection on first run.
+## Database connection error on first start
+```bash
+docker compose restart backend
+```
 
 ---
 

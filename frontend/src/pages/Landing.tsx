@@ -1,4 +1,4 @@
-import { motion } from "framer-motion"
+import { motion, type Variants } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { useState } from "react"
 
@@ -99,7 +99,7 @@ export default function Landing() {
   )
 }
 
-const pop = {
+const pop: Variants = {
   hidden: { opacity: 0, scale: 0.8, y: 20 },
   show: {
     opacity: 1,

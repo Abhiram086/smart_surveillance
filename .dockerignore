@@ -1,0 +1,32 @@
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/venv
+**/.venv
+**/*.egg-info
+
+# Node
+frontend/node_modules
+frontend/dist
+
+# Videos (bind-mounted at runtime, not baked into image)
+videos/
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker itself
+**/Dockerfile
+docker-compose.yml
+.dockerignore

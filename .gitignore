@@ -6,7 +6,12 @@ __pycache__/
 
 # ---------------- Virtual Environment ----------------
 venv/
+.venv/
 .env/
+
+# ---------------- Environment secrets ----------------
+backend/.env
+frontend/.env.local
 
 # ---------------- Models ----------------
 *.pt
@@ -35,3 +40,10 @@ runs/
 outputs/
 cache/
 datasets/
+
+# ---------------- Frontend ----------------
+frontend/node_modules/
+frontend/dist/
+
+# ---------------- Docker ----------------
+# (docker-compose.yml and Dockerfiles ARE committed intentionally)
