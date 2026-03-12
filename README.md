@@ -143,7 +143,32 @@ docker compose up --build backend
 
 PostgreSQL runs inside Docker. Data persists across restarts automatically.
 
-To wipe and start fresh:
+**Connect interactively:**
+```bash
+docker exec -it smss_db psql -U surveillance_user -d surveillance
+```
+
+Once inside, useful commands:
+```sql
+\dt                  -- list all tables
+\d users             -- show users table structure
+SELECT * FROM users; -- see all registered users
+\q                   -- exit
+```
+
+**One-liner queries (without entering interactive mode):**
+```bash
+# Check tables exist
+docker exec -it smss_db psql -U surveillance_user -d surveillance -c "\dt"
+
+# See all users
+docker exec -it smss_db psql -U surveillance_user -d surveillance -c "SELECT * FROM users;"
+
+# Show users table structure
+docker exec -it smss_db psql -U surveillance_user -d surveillance -c "\d users"
+```
+
+**Wipe and start fresh:**
 ```bash
 docker compose down -v
 docker compose up
