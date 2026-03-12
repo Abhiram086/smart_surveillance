@@ -1,4 +1,4 @@
-# 🛰️ Smart Surveillance System (YOLOv8 + FastAPI + React)
+# Smart Surveillance System (YOLOv8 + FastAPI + React)
 AI-powered real-time surveillance system capable of monitoring live cameras and detecting suspicious activities.
 
 Supports **Windows, Linux and MacOS**  
@@ -6,81 +6,49 @@ Automatically uses **CPU or NVIDIA GPU (CUDA)**.
 
 ---
 
-# ✨ Features
+# Features
 
-- 👤 Person detection using **YOLOv8**
-- 🏃 Running / abnormal behavior detection
-- 🚧 Metro line crossing detection
-- 🔒 Restricted zone monitoring
-- 📷 Live webcam streaming inside browser
-- 🌐 Full web dashboard (React UI)
-- 👥 User authentication (Admin / Viewer)
-- ⚡ Automatic GPU usage if CUDA available
-- 📦 Automatic model download (no manual setup)
-- 🐳 One-command Docker setup (no manual installs)
-
----
-
-# 🧠 System Architecture
-
-```
-Camera → Scenario → Detector → Stream → Browser UI
-```
-
-### Backend
-- **FastAPI**
-- **OpenCV**
-- **Ultralytics YOLOv8**
-- **PostgreSQL authentication**
-
-### Frontend
-- **React**
-- **Vite**
-- **TypeScript**
-- **Framer Motion UI**
-
-### Streaming
-MJPEG HTTP stream (no plugins required)
+- Person detection using **YOLOv8**
+- Running / abnormal behavior detection
+- Metro line crossing detection
+- Restricted zone monitoring
+- Live webcam streaming inside browser
+- Full web dashboard (React UI)
+- User authentication (Admin / Viewer)
+- Automatic GPU usage if CUDA available
+- Automatic model download (no manual setup)
+- One-command Docker setup (no manual installs)
 
 ---
 
-# 🐳 Quick Start (Docker) — Recommended
+# Quick Start (Docker)
 
 > No Python, Node.js, or PostgreSQL installation needed.  
 > Docker handles everything automatically.
 
 ## Requirements
 
-| Software      | Version  |
-|---------------|----------|
-| Docker        | Latest   |
+| Software       | Version |
+|----------------|---------|
+| Docker         | Latest  |
 | Docker Compose | Latest  |
-| Git           | Latest   |
+| Git            | Latest  |
 
-Optional:
+### Install Docker
 
-| Hardware   | Support  |
-|------------|----------|
-| NVIDIA GPU | CUDA 12+ |
-
----
-
-## 1️⃣ Install Docker
-
-### Linux (Arch / CachyOS)
+**Linux (Arch / CachyOS)**
 ```bash
 sudo pacman -S docker docker-compose
 sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
-newgrp docker
+sudo usermod -aG docker $USER && newgrp docker
 ```
 
-### Windows / Mac
+**Windows / Mac**  
 Download Docker Desktop: https://www.docker.com/products/docker-desktop
 
 ---
 
-## 2️⃣ Clone Repository
+## Clone Repository
 
 ```bash
 git clone https://github.com/Abhiram086/smart_surveillance.git
@@ -89,61 +57,51 @@ cd smart_surveillance
 
 ---
 
-## 3️⃣ Start Everything
+## CPU Only (no NVIDIA GPU)
+
+Works on any machine — Windows, Linux, Mac, integrated graphics, anything.
 
 ```bash
 docker compose up --build
 ```
 
-That's it. Docker will:
-- Download and start PostgreSQL automatically
-- Install all Python dependencies
-- Build and serve the React frontend
-- Wire everything together
-
-First run takes ~5–10 minutes (downloads PyTorch base image).  
-Subsequent runs start in seconds.
-
-Open browser: **http://localhost:5173**
-
 ---
 
-## 4️⃣ NVIDIA GPU Support (Optional)
+## NVIDIA GPU
 
-### Linux
+Requires nvidia-container-toolkit on Linux, or Docker Desktop on Windows.
+
+### Linux setup (one-time)
 ```bash
 sudo pacman -S nvidia-container-toolkit        # Arch / CachyOS
+# Ubuntu: sudo apt install nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-Then uncomment the GPU block in `docker-compose.yml`:
-```yaml
-deploy:
-  resources:
-    reservations:
-      devices:
-        - driver: nvidia
-          count: 1
-          capabilities: [gpu]
-```
+### Windows setup (one-time)
+Install Docker Desktop with WSL2 backend. NVIDIA support is built in — nothing extra needed.
 
-Rebuild:
+### Run with GPU
 ```bash
-docker compose up --build backend
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ```
-
-### Windows
-Install NVIDIA Container Toolkit via WSL2 — see:  
-https://docs.nvidia.com/cuda/wsl-user-guide/index.html
 
 ---
 
-## 🔧 Useful Commands
+Open browser: **http://localhost:5173**
+
+First run takes 5-10 minutes (downloads PyTorch base image).  
+Subsequent runs start in seconds.
+
+---
+
+## Useful Commands
 
 ```bash
-# Start in background
+# Run in background
 docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
 # View logs
 docker compose logs -f
@@ -153,38 +111,39 @@ docker compose down
 
 # Rebuild after code changes
 docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 
-# Connect to database directly
+# Connect to database
 docker exec -it smss_db psql -U surveillance_user -d surveillance
 ```
 
 ---
 
-## 📹 USB / Webcam Passthrough (Linux)
+## USB / Webcam Passthrough (Linux)
 
-Find your camera devices:
+Find your camera:
 ```bash
 ls /dev/video*
 ```
 
-Uncomment and edit the `devices` block in `docker-compose.yml`:
+Uncomment the `devices` block in `docker-compose.yml`:
 ```yaml
 devices:
   - /dev/video0:/dev/video0
 ```
 
-Rebuild backend:
+Then rebuild:
 ```bash
 docker compose up --build backend
 ```
 
 ---
 
-## 🗄️ Database
+## Database
 
-PostgreSQL runs inside Docker. Data persists across restarts in a named volume.
+PostgreSQL runs inside Docker. Data persists across restarts automatically.
 
-To wipe the database and start fresh:
+To wipe and start fresh:
 ```bash
 docker compose down -v
 docker compose up
@@ -194,7 +153,7 @@ docker compose up
 
 ---
 
-# 🧰 Manual Setup (Without Docker)
+# Manual Setup (Without Docker)
 
 <details>
 <summary>Click to expand manual setup instructions</summary>
@@ -208,56 +167,41 @@ docker compose up
 | PostgreSQL | 14+     |
 | Git        | Latest  |
 
----
-
-## 1️⃣ Clone Repository
+## 1. Clone Repository
 
 ```bash
 git clone https://github.com/Abhiram086/smart_surveillance.git
 cd smart_surveillance
 ```
 
----
+## 2. Create Python Virtual Environment
 
-## 2️⃣ Create Python Virtual Environment
-
-### Windows
+**Windows**
 ```bash
 python -m venv venv
 venv\Scripts\activate
 ```
 
-### Linux / Mac
+**Linux / Mac**
 ```bash
 python -m venv venv
 source venv/bin/activate
 ```
 
----
-
-## 3️⃣ Install Python Dependencies
+## 3. Install Python Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-On first run the system automatically downloads:
-```
-YOLOv8n model (~6MB)
-```
-
----
-
-## 4️⃣ Database Setup (PostgreSQL)
+## 4. Database Setup (PostgreSQL)
 
 Install PostgreSQL: https://www.postgresql.org/download/
 
-Open terminal:
 ```bash
 psql -U postgres
 ```
 
-Run:
 ```sql
 CREATE DATABASE surveillance;
 CREATE USER surveillance_user WITH PASSWORD 'surveillance_pass';
@@ -279,18 +223,14 @@ cd backend
 python -m db.init_db
 ```
 
----
-
-## 5️⃣ Install Frontend Dependencies
+## 5. Install Frontend Dependencies
 
 ```bash
 cd frontend
 npm install
 ```
 
----
-
-## 6️⃣ Run the System
+## 6. Run the System
 
 **Terminal 1 — Backend:**
 ```bash
@@ -310,47 +250,38 @@ Open browser: **http://localhost:5173**
 
 ---
 
-# 🔐 Authentication
+# Authentication
 
 Users can register directly from the UI.
 
-Roles supported:
-```
-admin
-viewer
-```
+Roles:
+- `admin` — full access
+- `viewer` — stream viewing only
 
-Credentials are stored securely using **bcrypt hashing** in PostgreSQL.
+Credentials stored using **bcrypt hashing** in PostgreSQL.
 
 ---
 
-# 🎯 Running Detection Without Web UI
+# Running Detection Without Web UI
 
 ```bash
-# Line Crossing
-python main.py config/metro_line.json
-
-# Restricted Zone
-python main.py config/restricted_zone.json
-
-# Behavior Detection
-python main.py config/behavior.json
+python main.py config/metro_line.json      # Line crossing
+python main.py config/restricted_zone.json # Restricted zone
+python main.py config/behavior.json        # Behavior detection
 ```
 
 Press **Q** to exit.
 
 ---
 
-# 📹 Using Your Own Video
+# Using Your Own Video
 
-Place videos inside `videos/` and edit the config file:
+Place videos inside `videos/` and edit the config:
 ```json
 "video": "videos/myvideo.mp4"
 ```
 
----
-
-# 🖥️ Using Webcam
+# Using Webcam
 
 ```json
 {
@@ -361,86 +292,67 @@ Place videos inside `videos/` and edit the config file:
 
 ---
 
-# ⚙️ GPU Support
-
-The system automatically detects CUDA:
-```
-CUDA available → GPU used
-No CUDA        → CPU used
-```
-
-No configuration required.
-
----
-
-# 📁 Project Structure
+# Project Structure
 
 ```
 smart_surveillance/
-│
-├── backend/          FastAPI backend + API routes
-├── core/             Detection engines
-├── scenarios/        Scenario logic
-├── config/           Scenario configuration files
-├── frontend/         React dashboard
-├── videos/           Sample videos
-├── main.py           CLI detection runner
+├── backend/           FastAPI backend + API routes
+├── core/              Detection engines
+├── scenarios/         Scenario logic
+├── config/            Scenario configuration files
+├── frontend/          React dashboard
+├── videos/            Sample videos
+├── main.py            CLI detection runner
 ├── requirements.txt
 ├── docker-compose.yml
-└── .dockerignore
+└── docker-compose.gpu.yml
 ```
 
 ---
 
-# 🧪 Tested Platforms
+# Tested Platforms
 
 | OS                  | Status |
 |---------------------|--------|
-| Windows 10/11       | ✅     |
-| Ubuntu / Arch Linux | ✅     |
-| MacOS               | ✅     |
-| NVIDIA GPU          | ✅     |
-| CPU Only            | ✅     |
+| Windows 10/11       | OK     |
+| Ubuntu / Arch Linux | OK     |
+| MacOS               | OK     |
+| NVIDIA GPU          | OK     |
+| CPU Only            | OK     |
 
 ---
 
-# ⚠️ Known Limitations (WIP)
+# Troubleshooting
 
-- Alert notifications not implemented
-
----
-
-# 🛠️ Troubleshooting
-
-## Webcam not opening
-Close applications using camera (Zoom, Teams, browser tabs).
-
-## Port already in use
-Change port mapping in `docker-compose.yml`:
-```yaml
-ports:
-  - "5174:80"   # change left side only
-```
-
-## GPU not detected in Docker (Linux)
+**GPU not detected in Docker (Linux)**
 ```bash
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-## Database connection error on first start
+**Port already in use**  
+Change the left side of the port mapping in `docker-compose.yml`:
+```yaml
+ports:
+  - "5174:80"
+```
+
+**Database connection error on first start**
 ```bash
 docker compose restart backend
 ```
 
+**Webcam not opening**  
+Close other apps using the camera (Zoom, Teams, browser tabs).
+
 ---
 
-# 📜 License
+# License
 
 Educational Mini Project
 
 ---
 
-# 👨‍💻 Author
+# Author
 
 Abhiram S

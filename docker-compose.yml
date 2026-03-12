@@ -1,23 +1,21 @@
 services:
 
-  # ── PostgreSQL database ────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     container_name: smss_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB:       surveillance
-      POSTGRES_USER:     surveillance_user
+      POSTGRES_DB: surveillance
+      POSTGRES_USER: surveillance_user
       POSTGRES_PASSWORD: surveillance_pass
     volumes:
-      - pgdata:/var/lib/postgresql/data   # data survives container restarts
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U surveillance_user -d surveillance"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  # ── FastAPI backend ────────────────────────────────────────────────────────
   backend:
     build:
       context: .
@@ -26,29 +24,18 @@ services:
     restart: unless-stopped
     depends_on:
       db:
-        condition: service_healthy      # wait until postgres is actually ready
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://surveillance_user:surveillance_pass@db:5432/surveillance
     ports:
       - "8000:8000"
     volumes:
-      - ./videos:/app/videos            # uploaded videos persist on host
-    # ── GPU passthrough (NVIDIA) ─────────────────────────────────────────────
-    # Uncomment this block if nvidia-container-toolkit is installed and working:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-    # ── Camera device passthrough (USB / V4L2) ───────────────────────────────
-    # Add your camera devices here. Find them with: ls /dev/video*
+      - ./videos:/app/videos
+    # To use USB cameras, uncomment and set your device paths:
     # devices:
     #   - /dev/video0:/dev/video0
     #   - /dev/video1:/dev/video1
 
-  # ── React frontend (nginx) ────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -58,7 +45,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "5173:80"                       # same port your team is used to
+      - "5173:80"
 
 volumes:
   pgdata:
