@@ -24,7 +24,7 @@ export default function Viewer() {
   // Ensure page background matches viewer container (hide decorative blobs)
   React.useEffect(() => {
     const prevBg = document.body.style.background;
-    document.body.style.background = "#0c0c0c";
+    document.body.style.background = "#e6e4f4";
     const blobs = Array.from(document.querySelectorAll('.bg-blob')) as HTMLElement[];
     const prevDisplays = blobs.map(b => b.style.display || "");
     blobs.forEach(b => b.style.display = "none");
@@ -166,63 +166,66 @@ export default function Viewer() {
 const styles: any = {
 
   container: {
-
     maxWidth: 1200,
     margin: "0 auto",
     minHeight: "100vh",
-    background: "#0c0c0c",
-    color: "white",
+    background: "#e6e4f4",
+    color: "#374151",
     fontFamily: "Google Sans, Inter, -apple-system, system-ui",
-    boxSizing: "border-box"
+    boxSizing: "border-box",
+    padding: "40px"
   },
 
   heading: {
-    marginBottom: 18,
+    marginBottom: 24,
     fontSize: 60,
     fontWeight: 700,
-    color: "#ffffff",
-    paddingLeft: 0
+    color: "#1a1a1a",
+    paddingLeft: 0,
+    textShadow: "2px 2px 4px rgba(0,0,0,0.05)"
   },
 
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-    gap: 24
+    gap: 32
   },
 
   card: {
     background: "#ffffff",
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 24,
+    padding: 24,
     cursor: "pointer",
-    border: "1px solid #e5e7eb",
-    transition: "all 0.18s ease",
-    boxShadow: "0 6px 18px rgba(2,6,23,0.08)"
+    border: "none",
+    transition: "all 0.2s ease",
+    boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.6), -10px -10px 20px #ffffff, inset 2px 2px 8px rgba(255,255,255,0.8), inset -2px -2px 8px rgba(0,0,0,0.05)"
   },
 
   cardTitle: {
-    fontSize: 14,
-    marginBottom: 12,
+    fontSize: 18,
+    marginBottom: 16,
     color: "#1a1a1a",
-    fontWeight: 600
+    fontWeight: 700
   },
 
   feedWrapper: {
     height: 300,
     overflow: "hidden",
-    borderRadius: 12,
-    marginTop: 6
+    borderRadius: 16,
+    marginTop: 16,
+    border: "none",
+    boxShadow: "inset 4px 4px 8px rgba(0,0,0,0.05), inset -4px -4px 8px rgba(255,255,255,0.8)"
   },
 
   preview: {
     height: "100%",
-    background: "#0a0a0a",
+    background: "#f0f0f5",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     color: "#6b7280",
     fontSize: 15,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 18
   },
 
@@ -230,53 +233,56 @@ const styles: any = {
     height: "100vh",
     display: "flex",
     flexDirection: "column",
-    background: "#0c0c0c"
+    background: "#e6e4f4"
   },
 
   topbar: {
-    padding: "12px 20px",
-    background: "#111111",
+    padding: "16px 24px",
+    background: "#ffffff",
     display: "flex",
     alignItems: "center",
-    gap: 12,
-    borderBottom: "1px solid #222222"
+    gap: 16,
+    borderBottom: "none",
+    boxShadow: "0 4px 12px rgba(166, 171, 189, 0.3)"
   },
 
   title: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: 600
+    color: "#1a1a1a",
+    fontSize: 20,
+    fontWeight: 700
   },
 
   backBtn: {
     background: "#ffffff",
     border: "none",
-    color: "#1a1a1a",
-    padding: "8px 14px",
-    borderRadius: 10,
+    color: "#374151",
+    padding: "10px 20px",
+    borderRadius: 16,
     cursor: "pointer",
     fontWeight: 600,
-    fontSize: 13,
-    transition: "background 0.18s ease"
+    fontSize: 14,
+    transition: "all 0.2s ease",
+    boxShadow: "4px 4px 8px rgba(166, 171, 189, 0.6), -4px -4px 8px #ffffff, inset 2px 2px 6px rgba(255,255,255,0.8), inset -2px -2px 6px rgba(0,0,0,0.05)"
   },
 
   streamBtn: {
     marginLeft: "auto",
-    padding: "10px 25px",
-    background: "#1a1a1a",
-    border: "1px solid #333333",
-    borderRadius: 10,
+    padding: "12px 30px",
+    background: "#8b5cf6",
+    border: "none",
+    borderRadius: 16,
     color: "white",
     cursor: "pointer",
     fontSize: 18,
     fontFamily: "Google Sans, sans-serif",
-    fontWeight: "500",
-    transition: "background 0.2s ease"
+    fontWeight: "600",
+    transition: "all 0.2s ease",
+    boxShadow: "6px 6px 16px rgba(139, 92, 246, 0.3), inset 3px 3px 6px rgba(255, 255, 255, 0.4), inset -3px -3px 6px rgba(0, 0, 0, 0.15)"
   },
 
   singleFeed: {
     flex: 1,
-    background: "#0a0a0a",
-    padding: 16
+    background: "#e6e4f4",
+    padding: 24
   }
 };

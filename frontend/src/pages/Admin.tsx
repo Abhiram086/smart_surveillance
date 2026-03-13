@@ -117,8 +117,6 @@ export default function Admin() {
   const [activeZones, setActiveZones] = useState(0);
   const [totalEvents, setTotalEvents] = useState(0);
   const [activeAlerts, setActiveAlerts] = useState(0);
-  const [cameraMenuOpen, setCameraMenuOpen] = useState(false); // track expanded camera selector
-  const [customDropdownOpen, setCustomDropdownOpen] = useState(false); // track custom dropdown state
   const [scenarioDropdownOpen, setScenarioDropdownOpen] = useState(false); // track scenario dropdown state
   type Camera = {
     id: string;
@@ -903,113 +901,23 @@ export default function Admin() {
                 <div style={styles.metricLabel}>Status</div>
                 <div style={styles.metricValue}>{status}</div>
               </div>
-              <div
-                style={{
-                  ...styles.metricTile,
-                  width: "160px",
-                  height: "100px",
-                  background: "linear-gradient(0deg, #f87171, #dc2626)",
-                  cursor: "pointer"
-                }}
-                onClick={() => setCameraMenuOpen(open => !open)}
-              >
-                <div style={styles.metricLabel}>Select Camera</div>
-              </div>
-            </div>
-            <AnimatePresence mode="wait">
-              {cameraMenuOpen && (
-                <motion.div
-                  layoutId="camera-menu"
-                  style={{ ...styles.metricTile, flex: 1, background: "linear-gradient(0deg, #f87171, #dc2626)", marginTop: "12px", position: "relative" as const }}
-                  initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                  animate={{ opacity: 1, height: 100, marginTop: 12 }}
-                  exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                  transition={{ duration: 0.4, ease: "easeInOut" }}
-                >
-                  <motion.div
-                    style={{
-                      ...styles.customDropdown,
-                      height: customDropdownOpen ? "auto" : "auto"
-                    }}
-                  >
-                    <div style={styles.customDropdownField}>
-                      <input
-                        type="text"
-
-                        placeholder="Select a camera"
-                        value={selectedCamera ? cameras.find(c => c.id === selectedCamera)?.name : ""}
-                        readOnly
-                        style={styles.customDropdownInput}
-                        onClick={() => setCustomDropdownOpen(!customDropdownOpen)}
-                      />
-                      <span style={styles.customDropdownIcon}>▼</span>
-                    </div>
-
-                    <AnimatePresence>
-                      {customDropdownOpen && (
-                        <motion.div
-                          style={styles.customDropdownList}
-                          initial={{ opacity: 0, maxHeight: 0 }}
-                          animate={{ opacity: 1, maxHeight: 400 }}
-                          exit={{ opacity: 0, maxHeight: 0 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <div
-                            style={{
-                              ...styles.customDropdownListItem,
-                              background: selectedCamera === null ? "rgba(255,255,255,0.2)" : "transparent",
-                              color: "white"
-                            }}
-                            onClick={() => {
-                              setSelectedCamera(null);
-                              setCameraMenuOpen(false);
-                              setCustomDropdownOpen(false);
-                            }}
-                          >
-                            (none)
-                          </div>
-                          {cameras.map(cam => (
-                            <div
-                              key={cam.id}
-                              style={{
-                                ...styles.customDropdownListItem,
-                                background: selectedCamera === cam.id ? "rgba(255,255,255,0.2)" : "transparent",
-                                color: "white"
-                              }}
-                              onClick={() => {
-                                setSelectedCamera(cam.id);
-                                setCameraMenuOpen(false);
-                                setCustomDropdownOpen(false);
-                              }}
-                            >
-                              {cam.name}
-                            </div>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            {/* row 2 */}
-            <motion.div style={styles.metricsRow} layout>
-              <div style={{ ...styles.metricTile, width: "200px", height: "100px", background: "linear-gradient(180deg, #fb923c, #dc2626)" }}>
+              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
                 <div style={styles.metricLabel}>Active Zones</div>
                 <div style={styles.metricValue}>{activeZones}</div>
               </div>
-              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #23bfbc, #006989)" }}>
+              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
                 <div style={styles.metricLabel}>Active Scenarios</div>
                 <div style={styles.metricValue}>{scenario ? scenario : "None"}</div>
               </div>
-            </motion.div>
-            {/* row 3 */}
+            </div>
+
+            {/* row 2 */}
             <motion.div style={styles.metricsRow} layout>
-              <div style={{ ...styles.metricTile, width: "100px", height: "100px", background: "linear-gradient(0deg, #6b7280, #38bdf8)" }}>
+              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
                 <div style={styles.metricLabel}>Total Events</div>
                 <div style={styles.metricValue}>{totalEvents}</div>
               </div>
-              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #f87171, #dc2626)" }}>
+              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
                 <div style={styles.metricLabel}>Active Alerts</div>
                 <div style={styles.metricValue}>{activeAlerts}</div>
               </div>
@@ -1099,7 +1007,7 @@ export default function Admin() {
                   : "Press the button below to start defining the line on the selected camera feed."}
               </p>
               <button
-                style={styles.smallButton}
+                style={styles.startButton}
                 onClick={() => {
                   setDrawingLine(!drawingLine);
                   if (!drawingLine) {
@@ -1126,19 +1034,6 @@ export default function Admin() {
             </div>
           )}
 
-          {/* Start/Stop Button and Draw Zone Button in single row */}
-          <div style={styles.buttonRow}>
-            <button style={styles.startButton} onClick={handleStartScenario}>
-              {status === "Running" ? "■ Stop" : "▶ Start"}
-            </button>
-
-            {/* Draw Zone Button — shown only when no zone scenario active */}
-            {scenario !== "zone_detection" && (
-              <button style={styles.drawZoneButton}>
-                Draw New Zone
-              </button>
-            )}
-          </div>
 
           {/* Zone drawing UI */}
           {scenario === "zone_detection" && (
@@ -1386,9 +1281,9 @@ export default function Admin() {
 
 const styles: any = {
   page: {
-    background: "#0c0c0c",
+    background: "#e6e4f4",
     minHeight: "100vh",
-    color: "#e5e7eb",
+    color: "#374151",
     padding: "24px",
     fontFamily: "Google Sans Medium"
   },
@@ -1402,89 +1297,93 @@ const styles: any = {
 
   title: {
     margin: "0",
-    fontSize: "28px",
+    fontSize: "32px",
     fontWeight: "700",
-    color: "#ffffff"
+    color: "#1a1a1a",
+    textShadow: "2px 2px 4px rgba(0,0,0,0.05)"
   },
 
   subtitle: {
     margin: "5px 0 0 0",
-    fontSize: "14px",
-    color: "#888888"
+    fontSize: "15px",
+    color: "#6b7280"
   },
 
   badge: {
     background: "#ffffff",
-    padding: "8px 18px",
+    padding: "10px 24px",
     borderRadius: "24px",
     border: "none",
-    fontSize: "25px",
+    fontSize: "22px",
     fontFamily: "Google Sans, sans-serif",
-    fontWeight: "500",
+    fontWeight: "600",
     color: "#1a1a1a",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+    boxShadow: "6px 6px 12px rgba(166, 171, 189, 0.6), -6px -6px 12px #ffffff, inset 2px 2px 6px rgba(255,255,255,0.8), inset -2px -2px 6px rgba(0,0,0,0.05)",
+    cursor: "pointer",
+    transition: "all 0.2s ease"
   },
 
   monitorZonesSection: {
     background: "#ffffff",
-    borderRadius: "16px",
-    padding: "22px",
-    border: "1px solid #e5e7eb",
-    marginBottom: "20px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+    borderRadius: "24px",
+    padding: "24px",
+    border: "none",
+    marginBottom: "24px",
+    boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.6), -10px -10px 20px #ffffff, inset 2px 2px 8px rgba(255,255,255,0.8), inset -2px -2px 8px rgba(0,0,0,0.05)"
   },
 
   sectionTitle: {
-    fontWeight: "600",
-    marginBottom: "15px",
+    fontWeight: "700",
+    marginBottom: "16px",
     color: "#1a1a1a",
-    fontSize: "30px"
+    fontSize: "28px"
   },
 
   mainGrid: {
     display: "grid",
     gridTemplateColumns: "2fr 1fr",
     gridTemplateRows: "auto auto",
-    gap: "20px",
-    marginBottom: "20px"
+    gap: "24px",
+    marginBottom: "24px"
   },
 
   videoPanel: {
     background: "#ffffff",
-    borderRadius: "16px",
-    padding: "18px",
-    border: "1px solid #e5e7eb",
+    borderRadius: "24px",
+    padding: "24px",
+    border: "none",
     gridRow: "1 / 3",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+    boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.6), -10px -10px 20px #ffffff, inset 2px 2px 8px rgba(255,255,255,0.8), inset -2px -2px 8px rgba(0,0,0,0.05)"
   },
 
   controlPanel: {
     background: "#ffffff",
-    borderRadius: "16px",
-    padding: "22px",
-    border: "1px solid #e5e7eb",
+    borderRadius: "24px",
+    padding: "24px",
+    border: "none",
     gridRow: "1",
     gridColumn: "2",
     height: "fit-content",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+    boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.6), -10px -10px 20px #ffffff, inset 2px 2px 8px rgba(255,255,255,0.8), inset -2px -2px 8px rgba(0,0,0,0.05)"
   },
 
   thresholdSection: {
-    background: "#111827",
-    borderRadius: "12px",
-    padding: "20px",
-    border: "1px solid #1f2937",
+    background: "#ffffff",
+    borderRadius: "24px",
+    padding: "24px",
+    border: "none",
     gridRow: "2",
     gridColumn: "2",
     height: "fit-content",
-    marginBottom: "0"
+    marginBottom: "0",
+    boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.6), -10px -10px 20px #ffffff, inset 2px 2px 8px rgba(255,255,255,0.8), inset -2px -2px 8px rgba(0,0,0,0.05)"
   },
 
   panelTitle: {
-    fontWeight: "600",
-    marginBottom: "15px",
+    fontWeight: "700",
+    marginBottom: "16px",
     color: "#1a1a1a",
-    fontSize: "35px"
+    fontSize: "24px"
   },
 
   controlSection: {
@@ -1500,21 +1399,21 @@ const styles: any = {
 
   scenarioSelect: {
     width: "100%",
-    padding: "10px 12px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    background: "#f5f5f5",
+    padding: "12px 16px",
+    borderRadius: "16px",
+    border: "none",
+    background: "#f8f8f8",
     color: "#1a1a1a",
-    fontSize: "13px",
+    fontSize: "14px",
     cursor: "pointer",
-    outline: "none"
+    outline: "none",
+    boxShadow: "inset 4px 4px 8px rgba(0,0,0,0.05), inset -4px -4px 8px rgba(255,255,255,0.8)"
   },
 
   buttonRow: {
     display: "flex",
-    gap: "12px",
+    gap: "16px",
     marginBottom: "0px"
-
   },
 
   startButton: {
@@ -1522,27 +1421,29 @@ const styles: any = {
     padding: "20px",
     borderRadius: "20px",
     border: "none",
-    background: "#1a1a1a",
+    background: "#8b5cf6",
     color: "white",
     fontFamily: "Google Sans, sans-serif",
-    fontWeight: "500",
+    fontWeight: "600",
     cursor: "pointer",
-    fontSize: "19px",
-    transition: "background 0.2s ease"
+    fontSize: "18px",
+    transition: "all 0.2s ease",
+    boxShadow: "6px 6px 16px rgba(139, 92, 246, 0.3), -6px -6px 16px #ffffff, inset 3px 3px 6px rgba(255, 255, 255, 0.4), inset -3px -3px 6px rgba(0, 0, 0, 0.15)"
   },
 
   drawZoneButton: {
     flex: 1,
     padding: "20px",
     borderRadius: "20px",
-    border: "1px solid #e5e7eb",
-    background: "transparent",
-    color: "#1a1a1a",
+    border: "none",
+    background: "#ffffff",
+    color: "#374151",
     fontFamily: "Google Sans, sans-serif",
-    fontWeight: "500",
+    fontWeight: "600",
     cursor: "pointer",
-    fontSize: "19px",
-    transition: "background 0.2s ease"
+    fontSize: "18px",
+    transition: "all 0.2s ease",
+    boxShadow: "6px 6px 12px rgba(166, 171, 189, 0.6), -6px -6px 12px #ffffff, inset 2px 2px 6px rgba(255,255,255,0.8), inset -2px -2px 6px rgba(0,0,0,0.05)"
   },
 
   smallButton: {
@@ -1591,58 +1492,63 @@ const styles: any = {
   },
 
   metricTile: {
-    padding: "12px 16px",
+    padding: "16px",
     borderRadius: "20px",
     color: "white",
     display: "flex",
     flexDirection: "column" as const,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "90px",
-    fontSize: "14px"
+    minHeight: "100px",
+    fontSize: "14px",
+    boxShadow: "6px 6px 12px rgba(166, 171, 189, 0.4), -6px -6px 12px #ffffff, inset 2px 2px 6px rgba(255,255,255,0.6), inset -2px -2px 6px rgba(0,0,0,0.02)",
+    border: "none"
   },
 
   metricLabel: {
-    fontSize: "17px",
-    opacity: 0.9,
+    fontSize: "14px",
+    color: "rgba(255, 255, 255, 0.9)",
     marginBottom: "4px",
-    textAlign: "center" as const
+    textAlign: "center" as const,
+    fontWeight: "500"
   },
 
   metricValue: {
     fontSize: "26px",
-    fontWeight: 600,
+    fontWeight: 700,
+    color: "white",
     textAlign: "center" as const
   },
 
   metricSelect: {
-    padding: "4px 8px",
-    borderRadius: "8px",
+    padding: "6px 10px",
+    borderRadius: "12px",
     border: "none",
     fontSize: "13px",
     width: "100%",
     textAlign: "center" as const,
-    background: "rgba(255,255,255,0.2)",
-    color: "white"
+    background: "#ffffff",
+    color: "#1a1a1a",
+    boxShadow: "inset 2px 2px 4px rgba(0,0,0,0.05), inset -2px -2px 4px rgba(255,255,255,0.8)"
   },
 
   metricsContainer: {
     display: "flex",
     flexDirection: "column" as const,
-    gap: "12px",
-    margin: "20px 0"
+    gap: "16px",
+    margin: "24px 0"
   },
 
   metricsRow: {
     display: "flex",
-    gap: "12px"
+    gap: "16px"
   },
 
   videoPanelHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "15px",
+    marginBottom: "16px",
     gap: "10px"
   },
 
@@ -1652,35 +1558,38 @@ const styles: any = {
   },
 
   select: {
-    padding: "8px 12px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    background: "#f5f5f5",
+    padding: "10px 14px",
+    borderRadius: "12px",
+    border: "none",
+    background: "#f8f8f8",
     color: "#1a1a1a",
-    fontSize: "13px",
+    fontSize: "14px",
     cursor: "pointer",
     minWidth: "150px",
-    outline: "none"
+    outline: "none",
+    boxShadow: "inset 4px 4px 8px rgba(0,0,0,0.05), inset -4px -4px 8px rgba(255,255,255,0.8)"
   },
 
   noCamera: {
-    padding: "8px 12px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    background: "#f5f5f5",
+    padding: "10px 14px",
+    borderRadius: "12px",
+    border: "none",
+    background: "#f0f0f5",
     color: "#6b7280",
-    fontSize: "13px",
-    cursor: "pointer"
+    fontSize: "14px",
+    cursor: "pointer",
+    boxShadow: "inset 4px 4px 8px rgba(0,0,0,0.05), inset -4px -4px 8px rgba(255,255,255,0.8)"
   },
 
   viewer: {
     height: "65vh",
-    background: "#0a0a0a",
-    borderRadius: "14px",
+    background: "#f0f0f5",
+    borderRadius: "20px",
     overflow: "hidden",
     display: "flex",
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    boxShadow: "inset 4px 4px 10px rgba(0,0,0,0.05), inset -4px -4px 10px rgba(255,255,255,0.8)"
   },
 
   cameraGrid: {
@@ -1690,44 +1599,47 @@ const styles: any = {
   },
 
   cameraFeed: {
-    background: "#0a0a0a",
-    borderRadius: "14px",
-    border: "1px solid #e5e7eb",
+    background: "#f0f0f5",
+    borderRadius: "20px",
+    border: "none",
     overflow: "hidden",
     minHeight: "250px",
     cursor: "pointer",
-    transition: "all 0.2s ease"
+    transition: "all 0.2s ease",
+    boxShadow: "inset 4px 4px 10px rgba(0,0,0,0.05), inset -4px -4px 10px rgba(255,255,255,0.8)"
   },
 
   cameraFeedHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "10px 14px",
-    background: "#f8f8f8",
-    borderBottom: "1px solid #e5e7eb"
+    padding: "14px 18px",
+    background: "#ffffff",
+    borderBottom: "none",
+    boxShadow: "0 4px 8px rgba(0,0,0,0.03)"
   },
 
   cameraName: {
-    fontSize: "13px",
-    fontWeight: "600",
+    fontSize: "14px",
+    fontWeight: "700",
     color: "#1a1a1a"
   },
 
   removeButton: {
-    background: "transparent",
+    background: "#fee2e2",
     border: "none",
     color: "#ef4444",
     cursor: "pointer",
     fontSize: "16px",
     padding: "0",
-    width: "24px",
-    height: "24px",
+    width: "28px",
+    height: "28px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: "6px",
-    transition: "background 0.2s"
+    borderRadius: "8px",
+    transition: "background 0.2s",
+    boxShadow: "inset 2px 2px 4px rgba(0,0,0,0.05), inset -2px -2px 4px rgba(255,255,255,0.8)"
   },
 
   cameraFeedContent: {
@@ -1769,46 +1681,48 @@ const styles: any = {
 
   modal: {
     background: "#ffffff",
-    borderRadius: "20px",
-    border: "1px solid #e5e7eb",
+    borderRadius: "24px",
+    border: "none",
     width: "90%",
     maxWidth: "500px",
-    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)"
+    boxShadow: "16px 16px 32px rgba(166, 171, 189, 0.4), -16px -16px 32px #ffffff"
   },
 
   modalHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "22px 24px",
-    borderBottom: "1px solid #f0f0f0"
+    padding: "24px 28px",
+    borderBottom: "none",
+    boxShadow: "0 4px 8px rgba(0,0,0,0.02)"
   },
 
   modalTitle: {
     margin: "0",
-    fontSize: "18px",
+    fontSize: "22px",
     fontWeight: "700",
     color: "#1a1a1a"
   },
 
   modalCloseButton: {
-    background: "#f5f5f5",
+    background: "#f8f8f8",
     border: "none",
     color: "#6b7280",
-    fontSize: "18px",
+    fontSize: "16px",
     cursor: "pointer",
     padding: "0",
-    width: "32px",
-    height: "32px",
+    width: "36px",
+    height: "36px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: "10px",
-    transition: "background 0.2s"
+    borderRadius: "12px",
+    transition: "all 0.2s ease",
+    boxShadow: "4px 4px 8px rgba(0,0,0,0.05), -4px -4px 8px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.8), inset -2px -2px 4px rgba(0,0,0,0.02)"
   },
 
   modalBody: {
-    padding: "24px"
+    padding: "28px"
   },
 
   formGroup: {
@@ -1825,70 +1739,76 @@ const styles: any = {
 
   formInput: {
     width: "100%",
-    padding: "11px 14px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    background: "#f5f5f5",
+    padding: "14px 16px",
+    borderRadius: "16px",
+    border: "none",
+    background: "#f8f8f8",
     color: "#1a1a1a",
-    fontSize: "13px",
+    fontSize: "14px",
     boxSizing: "border-box" as const,
     outline: "none",
-    transition: "border-color 0.2s ease"
+    transition: "all 0.2s ease",
+    boxShadow: "inset 4px 4px 8px rgba(0,0,0,0.05), inset -4px -4px 8px rgba(255,255,255,0.8)"
   },
 
   formSelect: {
     width: "100%",
-    padding: "11px 14px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    background: "#f5f5f5",
+    padding: "14px 16px",
+    borderRadius: "16px",
+    border: "none",
+    background: "#f8f8f8",
     color: "#1a1a1a",
-    fontSize: "13px",
+    fontSize: "14px",
     cursor: "pointer",
     boxSizing: "border-box" as const,
-    outline: "none"
+    outline: "none",
+    boxShadow: "inset 4px 4px 8px rgba(0,0,0,0.05), inset -4px -4px 8px rgba(255,255,255,0.8)"
   },
 
   helpText: {
-    background: "#f8f8f8",
-    padding: "14px",
-    borderRadius: "10px",
+    background: "#fdfdfd",
+    padding: "16px",
+    borderRadius: "16px",
     marginBottom: "16px",
-    fontSize: "12px",
+    fontSize: "13px",
     color: "#6b7280",
-    border: "1px solid #f0f0f0"
+    border: "none",
+    boxShadow: "inset 2px 2px 6px rgba(0,0,0,0.03), inset -2px -2px 6px rgba(255,255,255,0.8)"
   },
 
   modalFooter: {
     display: "flex",
-    gap: "10px",
+    gap: "12px",
     justifyContent: "flex-end",
-    padding: "18px 24px",
-    borderTop: "1px solid #f0f0f0"
+    padding: "20px 28px",
+    borderTop: "none",
+    boxShadow: "0 -4px 8px rgba(0,0,0,0.02)"
   },
 
   cancelButton: {
-    padding: "10px 18px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    background: "transparent",
+    padding: "12px 20px",
+    borderRadius: "16px",
+    border: "none",
+    background: "#ffffff",
     color: "#6b7280",
     fontWeight: "600",
     cursor: "pointer",
-    fontSize: "13px",
-    transition: "background 0.2s ease"
+    fontSize: "14px",
+    transition: "all 0.2s ease",
+    boxShadow: "4px 4px 8px rgba(166, 171, 189, 0.4), -4px -4px 8px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.8), inset -2px -2px 4px rgba(0,0,0,0.02)"
   },
 
   confirmButton: {
-    padding: "10px 18px",
-    borderRadius: "10px",
+    padding: "12px 24px",
+    borderRadius: "16px",
     border: "none",
-    background: "#1a1a1a",
+    background: "#8b5cf6",
     color: "white",
     fontWeight: "600",
     cursor: "pointer",
-    fontSize: "13px",
-    transition: "background 0.2s ease"
+    fontSize: "14px",
+    transition: "all 0.2s ease",
+    boxShadow: "4px 4px 12px rgba(139, 92, 246, 0.3), -4px -4px 12px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)"
   },
 
   viewerPlaceholder: {
@@ -1977,16 +1897,17 @@ const styles: any = {
 
   updateButton: {
     width: "100%",
-    padding: "25px",
+    padding: "20px",
     borderRadius: "20px",
     border: "none",
-    background: "#1a1a1a",
-    color: "white",
+    background: "#ffffff",
+    color: "#374151",
     fontFamily: "Google Sans, sans-serif",
-    fontWeight: "500",
+    fontWeight: "600",
     cursor: "pointer",
-    fontSize: "20px",
-    transition: "background 0.2s ease"
+    fontSize: "18px",
+    transition: "all 0.2s ease",
+    boxShadow: "6px 6px 12px rgba(166, 171, 189, 0.6), -6px -6px 12px #ffffff, inset 2px 2px 6px rgba(255,255,255,0.8), inset -2px -2px 6px rgba(0,0,0,0.05)"
   },
 
   bottomGrid: {
@@ -1998,46 +1919,48 @@ const styles: any = {
 
   bottomPanel: {
     background: "#ffffff",
-    borderRadius: "16px",
-    padding: "22px",
-    border: "1px solid #e5e7eb",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+    borderRadius: "24px",
+    padding: "24px",
+    border: "none",
+    boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.6), -10px -10px 20px #ffffff, inset 2px 2px 8px rgba(255,255,255,0.8), inset -2px -2px 8px rgba(0,0,0,0.05)"
   },
 
   bottomPanelHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "15px"
+    marginBottom: "16px"
   },
 
   bottomButtons: {
     display: "flex",
-    gap: "10px"
+    gap: "12px"
   },
 
   addButton: {
-    padding: "8px 16px",
-    borderRadius: "10px",
+    padding: "10px 20px",
+    borderRadius: "16px",
     border: "none",
-    background: "#1a1a1a",
+    background: "#8b5cf6",
     color: "white",
     fontWeight: "600",
     cursor: "pointer",
-    fontSize: "12px",
-    transition: "background 0.2s ease"
+    fontSize: "13px",
+    transition: "all 0.2s ease",
+    boxShadow: "4px 4px 10px rgba(139, 92, 246, 0.3), -4px -4px 10px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)"
   },
 
   uploadButton: {
-    padding: "8px 16px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    background: "transparent",
-    color: "#1a1a1a",
+    padding: "10px 20px",
+    borderRadius: "16px",
+    border: "none",
+    background: "#ffffff",
+    color: "#374151",
     fontWeight: "600",
     cursor: "pointer",
-    fontSize: "12px",
-    transition: "background 0.2s ease"
+    fontSize: "13px",
+    transition: "all 0.2s ease",
+    boxShadow: "4px 4px 8px rgba(166, 171, 189, 0.4), -4px -4px 8px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.8), inset -2px -2px 4px rgba(0,0,0,0.02)"
   },
 
   tabsContainer: {
@@ -2085,31 +2008,32 @@ const styles: any = {
   customDropdownField: {
     position: "relative" as const,
     width: "100%",
-    color: "black"
+    color: "#1a1a1a"
   },
 
   customDropdownInput: {
     width: "100%",
-    padding: "10px 14px",
-    borderRadius: "8px",
+    padding: "12px 16px",
+    borderRadius: "16px",
     border: "none",
-    background: "rgba(255,255,255,0.2)",
-    color: "white",
-    fontSize: "13px",
+    background: "#ffffff",
+    color: "#1a1a1a",
+    fontSize: "14px",
     cursor: "pointer",
     outline: "none",
     appearance: "none" as const,
     paddingRight: "32px",
-    fontWeight: "500"
+    fontWeight: "600",
+    boxShadow: "inset 4px 4px 8px rgba(0,0,0,0.05), inset -4px -4px 8px rgba(255,255,255,0.8)"
   },
 
   customDropdownIcon: {
     position: "absolute" as const,
-    right: "12px",
+    right: "14px",
     top: "50%",
     transform: "translateY(-50%)",
-    color: "rgba(255,255,255,0.6)",
-    fontSize: "11px",
+    color: "#6b7280",
+    fontSize: "12px",
     pointerEvents: "none" as const
   },
 
@@ -2118,45 +2042,46 @@ const styles: any = {
     top: "100%",
     left: 0,
     right: 0,
-    background: "linear-gradient(135deg, #f87171, #dc2626)",
-    borderRadius: "8px",
-    border: "1px solid rgba(255,255,255,0.2)",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+    background: "#ffffff",
+    borderRadius: "16px",
+    border: "none",
+    boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.4), -10px -10px 20px #ffffff",
     zIndex: 9999,
     overflow: "hidden",
-    marginTop: "6px"
+    marginTop: "8px"
   },
 
   customDropdownListItem: {
-    padding: "10px 14px",
+    padding: "12px 16px",
     border: "none",
     background: "transparent",
-    color: "rgba(255,255,255,0.8)",
-    fontSize: "13px",
+    color: "#1a1a1a",
+    fontSize: "14px",
     cursor: "pointer",
     textAlign: "left" as const,
     transition: "all 0.15s ease",
-    borderBottom: "1px solid rgba(255,255,255,0.1)",
-    fontWeight: "400",
+    borderBottom: "1px solid #f0f0f5",
+    fontWeight: "500",
     display: "flex",
     alignItems: "center"
   },
 
   customDropdownButton: {
     width: "100%",
-    padding: "10px 14px",
-    borderRadius: "8px",
-    border: "1px solid rgba(255,255,255,0.3)",
-    background: "rgba(255,255,255,0.1)",
-    color: "white",
-    fontSize: "13px",
+    padding: "12px 16px",
+    borderRadius: "16px",
+    border: "none",
+    background: "#ffffff",
+    color: "#1a1a1a",
+    fontSize: "14px",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     transition: "all 0.2s ease",
-    fontWeight: "500",
-    marginBottom: "6px"
+    fontWeight: "600",
+    marginBottom: "6px",
+    boxShadow: "6px 6px 12px rgba(166, 171, 189, 0.4), -6px -6px 12px #ffffff"
   },
 
   customDropdownOptions: {
@@ -2164,31 +2089,31 @@ const styles: any = {
     top: "100%",
     left: 0,
     right: 0,
-    background: "#ef4444",
-    borderRadius: "8px",
-    border: "1px solid rgba(255,255,255,0.2)",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+    background: "#ffffff",
+    borderRadius: "16px",
+    border: "none",
+    boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.4), -10px -10px 20px #ffffff",
     zIndex: 10,
     overflow: "hidden"
   },
 
   customDropdownOption: {
     width: "100%",
-    padding: "10px 14px",
+    padding: "12px 16px",
     border: "none",
     background: "transparent",
-    color: "white",
-    fontSize: "13px",
+    color: "#1a1a1a",
+    fontSize: "14px",
     cursor: "pointer",
     textAlign: "left" as const,
     transition: "background 0.15s ease",
-    borderBottom: "1px solid rgba(255,255,255,0.1)",
+    borderBottom: "1px solid #f0f0f5",
     fontWeight: "500"
   },
 
   emptyText2: {
     margin: "0 0 10px 0",
-    fontSize: "12px",
+    fontSize: "13px",
     color: "#9ca3af"
   }
 };
