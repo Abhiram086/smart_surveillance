@@ -18,6 +18,10 @@ function CustomSlider({ min, max, step, value, onChange, style, showTicks = true
   const range = max - min;
   const progress = ((value - min) / range) * 100;
 
+  // Padding around the visible inner track (prevents it from touching the rounded container edges)
+  const padding = 22;
+  const trackInset = 12; // additional inset so inner track doesn't sit flush to outer rounded corners
+
   // Generate tick positions
   const ticks = [];
   for (let i = min; i <= max; i += step) {
@@ -25,62 +29,80 @@ function CustomSlider({ min, max, step, value, onChange, style, showTicks = true
   }
 
   return (
-    <div style={{ position: "relative", width: "100%", ...style }}>
-      {/* Track background with dots */}
-      <div style={{
+    <div
+      style={{
         position: "relative",
-        height: "60px",
-        display: "flex",
-        alignItems: "center",
-        paddingLeft: "20px",
-        paddingRight: "20px"
-      }}>
-        {/* Gray background bar */}
-        <div style={{
-          position: "absolute",
-          left: "0px",
-          right: "0px",
-          height: "30px",
-          background: "#b0b0b0",
-          borderRadius: "16px",
-          top: "50%",
-          transform: "translateY(-50%)",
-          zIndex: 1
-        }} />
-
-        {/* Tick dots */}
-        {showTicks && ticks.map((tick) => {
-          const tickProgress = ((tick - min) / range) * 100;
-          return (
-            <div
-              key={tick}
-              style={{
-                position: "absolute",
-                left: `calc(20px + ${tickProgress}% * (100% - 40px) / 100%)`,
-                top: "50%",
-                transform: "translate(-50%, -50%)",
-                width: "16px",
-                height: "16px",
-                backgroundColor: "#6b7280",
-                borderRadius: "50%",
-                zIndex: 2
-              }}
-            />
-          );
-        })}
-
-        {/* Active thumb (larger black circle) */}
+        width: "100%",
+        ...style
+      }}
+    >
+      {/* Claymorphism slider track */}
+      <div
+        style={{
+          position: "relative",
+          height: "70px",
+          display: "flex",
+          alignItems: "center",
+          paddingLeft: `${padding}px`,
+          paddingRight: `${padding}px`,
+          borderRadius: "30px",
+          background: "linear-gradient(145deg, #f4f4ff, #d8d8ff)",
+          boxShadow: "12px 12px 24px rgba(0,0,0,0.12), -12px -12px 24px rgba(255,255,255,0.8)"
+        }}
+      >
+        {/* Inner track */}
         <div
           style={{
             position: "absolute",
-            left: `calc(20px + ${progress}% * (100% - 40px) / 100%)`,
+            left: `${padding + trackInset}px`,
+            right: `${padding + trackInset}px`,
+            height: "22px",
+            background: "#e7e7ff",
+            borderRadius: "16px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 1,
+            boxShadow: "inset 4px 4px 10px rgba(0,0,0,0.12), inset -4px -4px 10px rgba(255,255,255,0.8)"
+          }}
+        />
+
+        {/* Tick dots */}
+        {showTicks &&
+          ticks.map((tick) => {
+            const tickProgress = ((tick - min) / range) * 100;
+            return (
+              <div
+                key={tick}
+                style={{
+                  position: "absolute",
+                  left: `calc(${padding + trackInset}px + ${tickProgress}% * (100% - ${(padding + trackInset) * 2}px) / 100%)`,
+                  top: "50%",
+                  transform: "translate(-50%, -50%)",
+                  width: "14px",
+                  height: "14px",
+                  backgroundColor: "#f2f2ff",
+                  borderRadius: "50%",
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  boxShadow: "2px 2px 4px rgba(0,0,0,0.08), -2px -2px 4px rgba(255,255,255,0.9)",
+                  zIndex: 2
+                }}
+              />
+            );
+          })}
+
+        {/* Active thumb (clay-style) */}
+        <div
+          style={{
+            position: "absolute",
+            left: `calc(${padding + trackInset}px + ${progress}% * (100% - ${(padding + trackInset) * 2}px) / 100%)`,
             top: "50%",
             transform: "translate(-50%, -50%)",
-            width: "37px",
-            height: "37px",
-            backgroundColor: "#000000",
+            width: "38px",
+            height: "38px",
+            background: "linear-gradient(145deg, #ffffff, #d0d0ff)",
             borderRadius: "50%",
             zIndex: 3,
+            boxShadow: "6px 6px 16px rgba(0,0,0,0.18), -6px -6px 16px rgba(255,255,255,0.85)",
             transition: "left 0.05s ease-out"
           }}
         />
@@ -118,6 +140,7 @@ export default function Admin() {
   const [totalEvents, setTotalEvents] = useState(0);
   const [activeAlerts, setActiveAlerts] = useState(0);
   const [scenarioDropdownOpen, setScenarioDropdownOpen] = useState(false); // track scenario dropdown state
+  const [activeScenariosOpen, setActiveScenariosOpen] = useState(false); // track active scenarios badge dropdown
   type Camera = {
     id: string;
     name: string;
@@ -129,6 +152,7 @@ export default function Admin() {
 
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
+  const [fullScreenCameraId, setFullScreenCameraId] = useState<string | null>(null);
   const [drawingLine, setDrawingLine] = useState(false);
   const [savedCamera, setSavedCamera] = useState<Camera | null>(null);
   const [activeScenarioCamId, setActiveScenarioCamId] = useState<string | null>(null);
@@ -171,6 +195,7 @@ export default function Admin() {
     }
   }, [status]);
   const [showAddCameraModal, setShowAddCameraModal] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [newCameraName, setNewCameraName] = useState("");
   const [newCameraSource, setNewCameraSource] = useState("");
   const [newCameraType, setNewCameraType] = useState<"ip" | "webcam" | "file">("ip");
@@ -541,11 +566,12 @@ export default function Admin() {
   };
 
   const getGridCols = () => {
-    if (cameras.length === 0) return 1;
-    if (cameras.length === 1) return 1;
-    if (cameras.length === 2) return 2;
-    if (cameras.length === 3) return 2;
-    return 2;
+    const count = fullScreenCameraId ? 1 : cameras.length + 1;
+    if (count === 0 || count === 1) return 1;
+    if (count === 2) return 2;
+    if (count === 3) return 3;
+    if (count === 4) return 2;
+    return 3;
   };
 
   const renderCameraFeed = (camera: Camera) => {
@@ -792,387 +818,754 @@ export default function Admin() {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
-      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      transition={{ duration: 0.7, ease: "easeOut" }}
-      style={styles.page}
-    >
-      {/* HEADER */}
-      <div style={styles.header}>
+    <div style={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden", background: "#e6e4f4", fontFamily: "Google Sans Medium", color: "#374151" }}>
+
+      <style>{`
+        button {
+          transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+        }
+        button:active {
+          transform: scale(0.92);
+          transition: transform 0.1s ease;
+        }
+        /* Hide scrollbar for cleaner look */
+        ::-webkit-scrollbar {
+          width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(0,0,0,0.1);
+          border-radius: 4px;
+        }
+      `}</style>
+
+      {/* LEFT SIDEBAR */}
+      <div style={styles.sidebar}>
+        <div style={styles.sidebarLogoWrapper}>
+          <div style={styles.sidebarLogoIcon}>🛡️</div>
+          <span style={styles.sidebarLogoText}>VisionAI</span>
+        </div>
+
+        <div style={styles.sidebarNav}>
+          <div style={{ ...styles.sidebarNavItem, ...styles.sidebarNavItemActive }}>
+            <span style={{ marginRight: "12px" }}>🏠</span> Dashboard
+          </div>
+          <div style={styles.sidebarNavItem}>
+            <span style={{ marginRight: "12px" }}>📹</span> Live Feeds
+          </div>
+          <div style={styles.sidebarNavItem}>
+            <span style={{ marginRight: "12px" }}>🧠</span> AI Insights
+          </div>
+          <div style={styles.sidebarNavItem}>
+            <span style={{ marginRight: "12px" }}>⚠️</span> Incidents
+          </div>
+          <div style={styles.sidebarNavItem}>
+            <span style={{ marginRight: "12px" }}>👥</span> Facial Recog
+          </div>
+          <div style={styles.sidebarNavItem}>
+            <span style={{ marginRight: "12px" }}>📈</span> Reports
+          </div>
+          <div style={styles.sidebarNavItem}>
+            <span style={{ marginRight: "12px" }}>⚙️</span> Settings
+          </div>
+        </div>
+
+        <div style={styles.sidebarBottom}>
+          <div style={styles.sidebarNavItem}>
+            <span style={{ marginRight: "12px" }}>💬</span> Support
+          </div>
+        </div>
+      </div>
+
+      {/* MAIN CONTENT AREA */}
+      <motion.div
+        initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
+        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
+        style={styles.pageContent}
+      >
+        {/* HEADER */}
+        <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Smart Surveillance System</h1>
           <p style={styles.subtitle}>Real-time video analysis and event detection</p>
         </div>
-        <div style={styles.headerRight}>
-          <div style={{
+        <div style={{ ...styles.headerRight, position: "relative" }}>
+          <button style={{
             ...styles.badge,
-            background: status === "Running" ? "#16a34a" : "#dc2626",
+            background: (status === "Running" || Object.keys(cameraRunning).length > 0) ? "#16a34a" : "#dc2626",
             color: "#ffffff"
-          }}>{status === "Running" ? "Active" : "Inactive"}</div>
+          }} onClick={() => setActiveScenariosOpen(!activeScenariosOpen)}>
+            {(status === "Running" || Object.keys(cameraRunning).length > 0) ? "Active ▼" : "Inactive"}
+          </button>
+
+          <AnimatePresence>
+            {activeScenariosOpen && (Object.keys(cameraRunning).length > 0 || status === "Running") && (
+              <motion.div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: "100px", /* align under badge roughly */
+                  marginTop: "12px",
+                  background: "#ffffff",
+                  borderRadius: "20px",
+                  padding: "16px",
+                  minWidth: "250px",
+                  zIndex: 9999,
+                  boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.6), -10px -10px 20px #ffffff, inset 2px 2px 8px rgba(255,255,255,0.8), inset -2px -2px 8px rgba(0,0,0,0.05)",
+                }}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: "12px", color: "#1a1a1a", fontSize: "16px" }}>Active Analysis</div>
+                
+                {Object.keys(cameraRunning).length === 0 && status === "Running" && activeScenarioCamId && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", padding: "10px", background: "#f8f8f8", borderRadius: "12px", boxShadow: "inset 4px 4px 8px rgba(0,0,0,0.05), inset -4px -4px 8px rgba(255,255,255,0.8)" }}>
+                    <div>
+                      <div style={{ fontSize: "14px", fontWeight: 600, color: "#1a1a1a" }}>Global Scenario</div>
+                      <div style={{ fontSize: "12px", color: "#6b7280" }}>{scenario}</div>
+                    </div>
+                    <button
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "10px",
+                        border: "none",
+                        background: "#ef4444",
+                        color: "white",
+                        fontWeight: 700,
+                        fontSize: 12,
+                        cursor: "pointer",
+                        boxShadow: "4px 4px 10px rgba(239, 68, 68, 0.3), -4px -4px 10px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)",
+                      }}
+                      onClick={handleStartScenario}
+                    >
+                      ■ Stop
+                    </button>
+                  </div>
+                )}
+                
+                {Object.entries(cameraRunning).map(([camId, runData]) => {
+                  const cam = cameras.find(c => c.id === camId) || runData.saved;
+                  return (
+                    <div key={camId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", padding: "10px", background: "#f8f8f8", borderRadius: "12px", boxShadow: "inset 4px 4px 8px rgba(0,0,0,0.05), inset -4px -4px 8px rgba(255,255,255,0.8)" }}>
+                      <div style={{ marginRight: "12px", overflow: "hidden" }}>
+                        <div style={{ fontSize: "14px", fontWeight: 600, color: "#1a1a1a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "120px" }}>{cam.name}</div>
+                        <div style={{ fontSize: "12px", color: "#6b7280" }}>{runData.scenario}</div>
+                      </div>
+                      <button
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "10px",
+                          border: "none",
+                          background: "#ef4444",
+                          color: "white",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor: "pointer",
+                          boxShadow: "4px 4px 10px rgba(239, 68, 68, 0.3), -4px -4px 10px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)",
+                        }}
+                        onClick={() => handleStartCameraScenario(cam)}
+                      >
+                        ■ Stop
+                      </button>
+                    </div>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <button style={styles.badge} onClick={handleLogout}>Logout</button>
         </div>
       </div>
 
-      {/* MONITOR ZONES SECTION */}
-      <div style={styles.monitorZonesSection}>
-        <div style={styles.sectionTitle}>Monitor Zones</div>
-        <p style={styles.emptyText}>No zones defined</p>
-      </div>
-
-      {/* MAIN GRID */}
+      {/* MAIN LAYOUT GRID (2 Columns: Left content, Right sidebar) */}
       <div style={styles.mainGrid}>
-        {/* LEFT VIDEO PANEL */}
-        <div style={styles.videoPanel}>
-          <div style={styles.videoPanelHeader}>
-            <div style={styles.panelTitle}>Video Feed</div>
-          </div>
-
-          {cameras.length === 0 ? (
-            <div style={styles.viewer}>
-              <div style={styles.viewerPlaceholder}>
-                <div style={styles.cameraIcon}></div>
-                <p style={styles.placeholderText}>Select Camera or Video</p>
-                <p style={styles.placeholderSubtext}>Choose a camera or upload a video to begin</p>
-              </div>
+        
+        {/* LEFT COLUMN - Video & Analysis */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          
+          {/* VIDEO PANEL */}
+          <div style={styles.videoPanel}>
+            <div style={styles.videoPanelHeader}>
+              <div style={styles.panelTitle}>Main Entrance Analysis <span style={{fontSize: "14px", fontWeight: "normal", color: "#6b7280", marginLeft: "10px"}}>| Zone A</span></div>
             </div>
-          ) : (
-            <div style={{ ...styles.cameraGrid, gridTemplateColumns: `repeat(${getGridCols()}, 1fr)` }}>
-              {cameras.map(cam => (
-                <div
-                  key={cam.id}
-                  style={{
-                    ...styles.cameraFeed,
-                    border: selectedCamera === cam.id ? "2px solid #06b6d4" : "1px solid #1f2937"
-                  }}
-                  onClick={() => setSelectedCamera(cam.id)}
+
+            <div style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+               <div style={{ background: "#f3f4f6", padding: "8px 16px", borderRadius: "20px", fontSize: "13px", fontWeight: 600, color: "#4f46e5" }}>
+                 👥 People detected in frame: 12
+               </div>
+            </div>
+
+            {cameras.length === 0 ? (
+              <div style={styles.viewer}>
+                <div style={{ ...styles.viewerPlaceholder, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <button 
+                      onClick={() => setAddMenuOpen(!addMenuOpen)}
+                      style={{ 
+                        width: "80px", height: "80px", borderRadius: "50%", background: "#8b5cf6", color: "white", 
+                        fontSize: "40px", fontWeight: 300, border: "none", cursor: "pointer", 
+                        boxShadow: "10px 10px 20px rgba(139, 92, 246, 0.4), -10px -10px 20px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.1)",
+                        display: "flex", justifyContent: "center", alignItems: "center",
+                        transition: "transform 0.2s ease"
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+                    >
+                      +
+                    </button>
+                    <AnimatePresence>
+                      {addMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                          style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: "16px", background: "white", borderRadius: "16px", padding: "12px", boxShadow: "0 15px 35px rgba(0,0,0,0.15)", zIndex: 100, minWidth: "180px", border: "1px solid #e5e7eb" }}
+                        >
+                          <div 
+                            onClick={() => { setShowAddCameraModal(true); setAddMenuOpen(false); }}
+                            style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#1f2937", borderRadius: "10px", transition: "background 0.2s", display: "flex", alignItems: "center", gap: "10px" }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                          >
+                            <span style={{ fontSize: "18px" }}>📷</span> Add Camera
+                          </div>
+                          <div 
+                            onClick={() => { handleUploadVideo(); setAddMenuOpen(false); }}
+                            style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#1f2937", borderRadius: "10px", transition: "background 0.2s", display: "flex", alignItems: "center", gap: "10px", marginTop: "4px" }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                          >
+                            <span style={{ fontSize: "18px" }}>📁</span> Upload Video
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <p style={{ ...styles.placeholderText, marginTop: "24px", color: "#6b7280" }}>Add Feed</p>
+                  <p style={styles.placeholderSubtext}>Choose a camera or upload a video to begin monitoring</p>
+                </div>
+              </div>
+            ) : fullScreenCameraId ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <button 
+                  onClick={() => { setFullScreenCameraId(null); setSelectedCamera(null); }}
+                  style={{ alignSelf: "flex-start", padding: "8px 16px", borderRadius: "10px", border: "none", background: "#e0e7ff", color: "#4f46e5", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "4px 4px 8px rgba(0,0,0,0.05)" }}
                 >
-                  <div style={styles.cameraFeedHeader}>
-                    <span style={styles.cameraName}>{cam.name}</span>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      {/* Per-camera start/stop button */}
-                      {scenario && (
+                  ← Back to Glance View
+                </button>
+                {cameras.filter(c => c.id === fullScreenCameraId).map(cam => (
+                  <div
+                    key={cam.id}
+                    style={{
+                      ...styles.cameraFeed,
+                      border: "1px solid transparent"
+                    }}
+                  >
+                    <div style={styles.cameraFeedHeader}>
+                      <span style={styles.cameraName}>{cam.name}</span>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        {scenario && (
+                          <button
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "10px",
+                              border: "none",
+                              background: cameraRunning[cam.id] ? "#ef4444" : "#8b5cf6",
+                              color: "white",
+                              fontWeight: 700,
+                              fontSize: 12,
+                              cursor: "pointer",
+                              boxShadow: cameraRunning[cam.id]
+                                ? "4px 4px 10px rgba(239, 68, 68, 0.3), -4px -4px 10px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)"
+                                : "4px 4px 10px rgba(139, 92, 246, 0.3), -4px -4px 10px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)",
+                              transition: "all 0.2s ease"
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartCameraScenario(cam);
+                            }}
+                          >
+                            {cameraRunning[cam.id] ? "■ Stop" : "▶ Start"}
+                          </button>
+                        )}
                         <button
-                          style={{
-                            padding: "3px 10px",
-                            borderRadius: 4,
-                            border: "none",
-                            background: cameraRunning[cam.id] ? "#dc2626" : "#06b6d4",
-                            color: "white",
-                            fontWeight: 600,
-                            fontSize: 11,
-                            cursor: "pointer",
-                          }}
+                          style={styles.removeButton}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleStartCameraScenario(cam);
+                            handleRemoveCamera(cam.id);
+                            setFullScreenCameraId(null);
                           }}
                         >
-                          {cameraRunning[cam.id] ? "■ Stop" : "▶ Start"}
+                          X
                         </button>
-                      )}
-                      <button
-                        style={styles.removeButton}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveCamera(cam.id);
-                        }}
-                      >
-                        X
-                      </button>
-                    </div>
-                  </div>
-                  {renderCameraFeed(cam)}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* RIGHT CONTROL PANEL */}
-        <div style={styles.controlPanel}>
-          <div style={styles.panelTitle}>Control Panel</div>
-
-          {/* metric summary tiles arranged fixed like reference image */}
-          <motion.div style={styles.metricsContainer} layout>
-            {/* row 1 */}
-            <div style={styles.metricsRow}>
-              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
-                <div style={styles.metricLabel}>Status</div>
-                <div style={styles.metricValue}>{status}</div>
-              </div>
-              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
-                <div style={styles.metricLabel}>Active Zones</div>
-                <div style={styles.metricValue}>{activeZones}</div>
-              </div>
-              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
-                <div style={styles.metricLabel}>Active Scenarios</div>
-                <div style={styles.metricValue}>{scenario ? scenario : "None"}</div>
-              </div>
-            </div>
-
-            {/* row 2 */}
-            <motion.div style={styles.metricsRow} layout>
-              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
-                <div style={styles.metricLabel}>Total Events</div>
-                <div style={styles.metricValue}>{totalEvents}</div>
-              </div>
-              <div style={{ ...styles.metricTile, flex: 1, height: "100px", background: "linear-gradient(0deg, #a78bfa, #3100a5)" }}>
-                <div style={styles.metricLabel}>Active Alerts</div>
-                <div style={styles.metricValue}>{activeAlerts}</div>
-              </div>
-            </motion.div>
-          </motion.div>
-
-          {/* Select Scenario */}
-          <div style={styles.controlSection}>
-            <label style={styles.label}>Select Scenario</label>
-            <div style={{ position: "relative" as const }}>
-              <div
-                style={{
-                  ...styles.scenarioSelect,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-                onClick={() => setScenarioDropdownOpen(!scenarioDropdownOpen)}
-              >
-                <span>{scenario ? ({ behavior: "Behavior Detection", metro_line: "Line Crossing", zone_detection: "Zone Detection" } as Record<string, string>)[scenario] || scenario : "Choose a scenario"}</span>
-                <span style={{ fontSize: 20, color: "#9ca3af", marginLeft: 8 }}>▼</span>
-              </div>
-              <AnimatePresence>
-                {scenarioDropdownOpen && (
-                  <motion.div
-                    style={{
-                      position: "absolute" as const,
-                      top: "100%",
-                      left: 0,
-                      right: 0,
-                      background: "#ffffff",
-                      borderRadius: "10px",
-                      border: "1px solid #e5e7eb",
-                      boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-                      zIndex: 9999,
-                      overflow: "hidden",
-                      marginTop: "6px",
-                    }}
-                    initial={{ opacity: 0, maxHeight: 0 }}
-                    animate={{ opacity: 1, maxHeight: 400 }}
-                    exit={{ opacity: 0, maxHeight: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {[
-                      { value: "", label: "Choose a scenario" },
-                      { value: "behavior", label: "Behavior Detection" },
-                      { value: "metro_line", label: "Line Crossing" },
-                      { value: "zone_detection", label: "Zone Detection" },
-                    ].map((opt) => (
-                      <div
-                        key={opt.value}
-                        style={{
-                          padding: "12px 16px",
-                          fontSize: "18px",
-                          cursor: "pointer",
-                          background: scenario === opt.value || (!scenario && opt.value === "") ? "#f0f0f0" : "transparent",
-                          color: "#1a1a1a",
-                          fontWeight: scenario === opt.value ? 600 : 400,
-                          borderBottom: "1px solid #f0f0f0",
-                          transition: "background 0.15s ease",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f5f5")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = scenario === opt.value || (!scenario && opt.value === "") ? "#f0f0f0" : "transparent")}
-                        onClick={() => {
-                          setScenario(opt.value || null);
-                          setLinePoints([]);
-                          setRestrictedPoint(null);
-                          setScenarioDropdownOpen(false);
-                        }}
-                      >
-                        {opt.label}
                       </div>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    </div>
+                    {renderCameraFeed(cam)}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ ...styles.cameraGrid, gridTemplateColumns: `repeat(${getGridCols()}, 1fr)` }}>
+                {cameras.map(cam => (
+                  <div
+                    key={cam.id}
+                    style={{
+                      ...styles.cameraFeed,
+                      cursor: "pointer",
+                      border: "1px solid transparent",
+                      transition: "transform 0.2s ease",
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.02)"}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+                    onClick={() => {
+                        setSelectedCamera(cam.id);
+                        setFullScreenCameraId(cam.id);
+                    }}
+                  >
+                    <div style={styles.cameraFeedHeader}>
+                      <span style={styles.cameraName}>{cam.name}</span>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        {scenario && (
+                          <button
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "10px",
+                              border: "none",
+                              background: cameraRunning[cam.id] ? "#ef4444" : "#8b5cf6",
+                              color: "white",
+                              fontWeight: 700,
+                              fontSize: 12,
+                              cursor: "pointer",
+                              boxShadow: cameraRunning[cam.id]
+                                ? "4px 4px 10px rgba(239, 68, 68, 0.3), -4px -4px 10px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)"
+                                : "4px 4px 10px rgba(139, 92, 246, 0.3), -4px -4px 10px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)",
+                              transition: "all 0.2s ease"
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartCameraScenario(cam);
+                            }}
+                          >
+                            {cameraRunning[cam.id] ? "■ Stop" : "▶ Start"}
+                          </button>
+                        )}
+                        <button
+                          style={styles.removeButton}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveCamera(cam.id);
+                          }}
+                        >
+                          X
+                        </button>
+                      </div>
+                    </div>
+                    {renderCameraFeed(cam)}
+                  </div>
+                ))}
+                
+                {/* The visually balanced Add Feed Card for the Grid */}
+                <div 
+                  style={{ 
+                    ...styles.cameraFeed, 
+                    display: "flex", 
+                    flexDirection: "column", 
+                    justifyContent: "center", 
+                    alignItems: "center", 
+                    minHeight: "200px", 
+                    border: "2px dashed #d1d5db", 
+                    background: "transparent", 
+                    cursor: "pointer" 
+                  }}
+                >
+                  <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setAddMenuOpen(!addMenuOpen); }}
+                      style={{ 
+                        width: "60px", height: "60px", borderRadius: "50%", background: "#8b5cf6", color: "white", 
+                        fontSize: "30px", fontWeight: 300, border: "none", cursor: "pointer", 
+                        boxShadow: "10px 10px 20px rgba(139, 92, 246, 0.3), -10px -10px 20px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.1)",
+                        display: "flex", justifyContent: "center", alignItems: "center",
+                        transition: "transform 0.2s ease"
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+                    >
+                      +
+                    </button>
+                    <AnimatePresence>
+                      {addMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                          style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: "16px", background: "white", borderRadius: "16px", padding: "12px", boxShadow: "0 15px 35px rgba(0,0,0,0.15)", zIndex: 100, minWidth: "180px", border: "1px solid #e5e7eb" }}
+                        >
+                          <div 
+                            onClick={(e) => { e.stopPropagation(); setShowAddCameraModal(true); setAddMenuOpen(false); }}
+                            style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#1f2937", borderRadius: "10px", transition: "background 0.2s", display: "flex", alignItems: "center", gap: "10px" }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                          >
+                            <span style={{ fontSize: "18px" }}>📷</span> Add Camera
+                          </div>
+                          <div 
+                            onClick={(e) => { e.stopPropagation(); handleUploadVideo(); setAddMenuOpen(false); }}
+                            style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#1f2937", borderRadius: "10px", transition: "background 0.2s", display: "flex", alignItems: "center", gap: "10px", marginTop: "4px" }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                          >
+                            <span style={{ fontSize: "18px" }}>📁</span> Upload Video
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <div style={{ marginTop: "16px", color: "#6b7280", fontWeight: 600, fontSize: "14px" }}>Add Feed</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ACTIVITY DETECTED BANNER */}
+          <div style={{ ...styles.monitorZonesSection, display: "flex", alignItems: "center", gap: "20px" }}>
+            <div style={{ width: "40px", height: "40px", color: "#8b5cf6", fontSize: "30px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              |||ı||
+            </div>
+            <div>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: "#6b7280", letterSpacing: "1px", marginBottom: "4px" }}>ACTIVITY DETECTED</div>
+              <div style={{ fontSize: "14px", color: "#1a1a1a" }}>Multiple persons entering restricted zone A, matching normal behavioral patterns.</div>
             </div>
           </div>
 
-          {/* scenario-specific configuration */}
-          {scenario === "metro_line" && (
-            <div style={styles.controlSection}>
-              <p style={{ margin: "8px 0", fontSize: 20 }}>
-                {drawingLine
-                  ? "Click two points to draw the line, then a third point for the restricted side."
-                  : "Press the button below to start defining the line on the selected camera feed."}
-              </p>
-              <button
-                style={styles.startButton}
-                onClick={() => {
-                  setDrawingLine(!drawingLine);
-                  if (!drawingLine) {
-                    // starting new drawing – clear previous
-                    setLinePoints([]);
-                    setRestrictedPoint(null);
-                  }
-                }}
-                disabled={!videoReady}
-              >
-                {drawingLine ? "Cancel Draw" : "Draw Line"}
-              </button>
-              {!videoReady && (
-                <p style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>
-                  Wait for video to load before drawing
-                </p>
-              )}
-              <p style={{ margin: "4px 0", fontSize: 12, color: "#9ca3af" }}>
-                Line points: {linePoints.map(p => `(${p.x},${p.y})`).join(" → ")}
-              </p>
-              <p style={{ margin: "4px 0", fontSize: 12, color: "#9ca3af" }}>
-                Restricted pt: {restrictedPoint ? `(${restrictedPoint.x},${restrictedPoint.y})` : "(none)"}
-              </p>
+          {/* BOTTOM LEFT ANALYSIS CARDS */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+             <div style={styles.monitorZonesSection}>
+               <div style={{ fontSize: "18px", fontWeight: 700 }}>Threat Assessment</div>
+               <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "20px" }}>AI generated risk vectors</div>
+               
+               {/* Radar Chart Placeholder */}
+               <div style={{ height: "200px", display: "flex", justifyContent: "center", alignItems: "flex-end", overflow: "hidden", position: "relative" }}>
+                 {/* Semi-circle radar background rings */}
+                 <div style={{ width: "200px", height: "200px", borderRadius: "50%", border: "1px solid #e5e7eb", position: "absolute", bottom: "-100px" }} />
+                 <div style={{ width: "150px", height: "150px", borderRadius: "50%", border: "1px solid #e5e7eb", position: "absolute", bottom: "-75px" }} />
+                 <div style={{ width: "100px", height: "100px", borderRadius: "50%", border: "1px solid #e5e7eb", position: "absolute", bottom: "-50px" }} />
+                 
+                 {/* Radial fill shape placeholder */}
+                 <svg width="200" height="100" style={{ position: "absolute", bottom: 0 }}>
+                    <polygon points="100,100 20,80 70,20 130,30 180,80" fill="rgba(139, 92, 246, 0.2)" stroke="#8b5cf6" strokeWidth="2" />
+                 </svg>
+               </div>
+             </div>
+
+             <div style={styles.monitorZonesSection}>
+               <div style={{ fontSize: "18px", fontWeight: 700 }}>Behavioral Confidence</div>
+               <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "20px" }}>Model certainty metrics</div>
+
+               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                 <div>
+                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px" }}>
+                     <span>Normal Activity</span> <span style={{ color: "#8b5cf6" }}>90%</span>
+                   </div>
+                   <div style={{ background: "#f3f4f6", height: "8px", borderRadius: "4px", width: "100%" }}>
+                     <div style={{ background: "#8b5cf6", height: "100%", borderRadius: "4px", width: "90%" }} />
+                   </div>
+                 </div>
+                 <div>
+                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px" }}>
+                     <span>Suspicious Loitering</span> <span style={{ color: "#8b5cf6" }}>45%</span>
+                   </div>
+                   <div style={{ background: "#f3f4f6", height: "8px", borderRadius: "4px", width: "100%" }}>
+                     <div style={{ background: "#a78bfa", height: "100%", borderRadius: "4px", width: "45%" }} />
+                   </div>
+                 </div>
+                 <div>
+                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px" }}>
+                     <span>Object Left Behind</span> <span style={{ color: "#8b5cf6" }}>12%</span>
+                   </div>
+                   <div style={{ background: "#f3f4f6", height: "8px", borderRadius: "4px", width: "100%" }}>
+                     <div style={{ background: "#c4b5fd", height: "100%", borderRadius: "4px", width: "12%" }} />
+                   </div>
+                 </div>
+               </div>
+             </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN - Stats & Logs */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          
+          {/* Top circular stats */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", background: "#ffffff", padding: "24px", borderRadius: "24px", boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.6), -10px -10px 20px #ffffff, inset 2px 2px 8px rgba(255,255,255,0.8), inset -2px -2px 8px rgba(0,0,0,0.05)" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ width: "80px", height: "80px", borderRadius: "50%", border: "8px solid #f3f4f6", borderTopColor: "#4f46e5", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "28px", color: "#4f46e5", marginBottom: "12px", transform: "rotate(-45deg)" }}>
+                <div style={{ transform: "rotate(45deg)" }}>🛡️</div>
+              </div>
+              <div style={{ fontSize: "22px", fontWeight: 700, color: "#4f46e5" }}>80%</div>
+              <div style={{ fontSize: "12px", color: "#6b7280" }}>Safety Score</div>
             </div>
-          )}
+            
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ width: "80px", height: "80px", borderRadius: "50%", border: "8px solid #f3f4f6", borderRightColor: "#a855f7", borderBottomColor: "#a855f7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "28px", color: "#a855f7", marginBottom: "12px", transform: "rotate(45deg)" }}>
+                <div style={{ transform: "rotate(-45deg)" }}>📊</div>
+              </div>
+              <div style={{ fontSize: "22px", fontWeight: 700, color: "#a855f7" }}>75%</div>
+              <div style={{ fontSize: "12px", color: "#6b7280" }}>Activity Level</div>
+            </div>
+          </div>
 
+          {/* Events Log Chat Style */}
+          <div style={{ ...styles.controlPanel, flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={styles.tabsContainer}>
+              <button style={styles.tabActive}>Event Log</button>
+              <button style={styles.tabInactive}>Alerts ({activeAlerts})</button>
+            </div>
+            
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px", padding: "10px 0" }}>
+              {/* System message */}
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}>🤖</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "11px", color: "#6b7280", marginBottom: "4px" }}>System AI • 08:30 AM</div>
+                  <div style={{ background: "#1f2937", color: "white", padding: "12px", borderRadius: "0 16px 16px 16px", fontSize: "13px", boxShadow: "4px 4px 8px rgba(0,0,0,0.1)" }}>
+                    Person detected lingering near Server Room A.
+                  </div>
+                </div>
+              </div>
 
-          {/* Zone drawing UI */}
-          {scenario === "zone_detection" && (
+              {/* User message */}
+              <div style={{ display: "flex", gap: "12px", flexDirection: "row-reverse" }}>
+                <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "#e0e7ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}>👨🏽‍💻</div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                  <div style={{ fontSize: "11px", color: "#6b7280", marginBottom: "4px" }}>You • 08:31 AM</div>
+                  <div style={{ background: "#8b5cf6", color: "white", padding: "12px", borderRadius: "16px 0 16px 16px", fontSize: "13px", boxShadow: "4px 4px 8px rgba(139, 92, 246, 0.2)" }}>
+                    Acknowledged. Keep monitoring zone B for the delivery truck. 👍
+                  </div>
+                </div>
+              </div>
+
+              {/* Alert message */}
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "#fee2e2", color: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}>⚠️</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "11px", marginBottom: "4px", color: "#ef4444" }}>Security Alert • 08:40 AM</div>
+                  <div style={{ background: "#1f2937", color: "white", padding: "12px", borderRadius: "0 16px 16px 16px", fontSize: "13px", borderLeft: "4px solid #ef4444", boxShadow: "4px 4px 8px rgba(0,0,0,0.1)" }}>
+                    Unrecognized individual at Back Entrance. Attempting door access.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Settings / Controls (moved below logs or kept collapsable) */}
+          <div style={{ ...styles.thresholdSection, marginTop: 0 }}>
+            <div style={{ fontSize: "16px", fontWeight: 700, marginBottom: "16px" }}>Analysis Controls</div>
+
+            {/* Select Scenario */}
             <div style={styles.controlSection}>
-              <p style={{ margin: "8px 0", fontSize: 14 }}>
-                {drawingZone
-                  ? "Click to add zone points. Right-click or press Close Zone when done."
-                  : "Press Draw Zone to start defining a polygon on the camera feed."}
-              </p>
-              {!zoneClosed ? (
+              <label style={styles.label}>Select Scenario</label>
+              <div style={{ position: "relative" as const }}>
+                <div
+                  style={{
+                    ...styles.scenarioSelect,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                  onClick={() => setScenarioDropdownOpen(!scenarioDropdownOpen)}
+                >
+                  <span>{scenario ? ({ behavior: "Behavior Detection", metro_line: "Line Crossing", zone_detection: "Zone Detection" } as Record<string, string>)[scenario] || scenario : "Choose a scenario"}</span>
+                  <span style={{ fontSize: 16, color: "#9ca3af", marginLeft: 8 }}>▼</span>
+                </div>
+                <AnimatePresence>
+                  {scenarioDropdownOpen && (
+                    <motion.div
+                      style={{
+                        position: "absolute" as const,
+                        top: "100%",
+                        left: 0,
+                        right: 0,
+                        background: "#ffffff",
+                        borderRadius: "10px",
+                        border: "1px solid #e5e7eb",
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                        zIndex: 9999,
+                        overflow: "hidden",
+                        marginTop: "6px",
+                      }}
+                      initial={{ opacity: 0, maxHeight: 0 }}
+                      animate={{ opacity: 1, maxHeight: 400 }}
+                      exit={{ opacity: 0, maxHeight: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {[
+                        { value: "", label: "Choose a scenario" },
+                        { value: "behavior", label: "Behavior Detection" },
+                        { value: "metro_line", label: "Line Crossing" },
+                        { value: "zone_detection", label: "Zone Detection" },
+                      ].map((opt) => (
+                        <div
+                          key={opt.value}
+                          style={{
+                            padding: "12px 16px",
+                            fontSize: "14px",
+                            cursor: "pointer",
+                            background: scenario === opt.value || (!scenario && opt.value === "") ? "#f0f0f0" : "transparent",
+                            color: "#1a1a1a",
+                            fontWeight: scenario === opt.value ? 600 : 400,
+                            borderBottom: "1px solid #f0f0f0",
+                            transition: "background 0.15s ease",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f5f5")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = scenario === opt.value || (!scenario && opt.value === "") ? "#f0f0f0" : "transparent")}
+                          onClick={() => {
+                            setScenario(opt.value || null);
+                            setLinePoints([]);
+                            setRestrictedPoint(null);
+                            setScenarioDropdownOpen(false);
+                          }}
+                        >
+                          {opt.label}
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
+            {/* scenario-specific configuration */}
+            {scenario === "metro_line" && (
+              <div style={styles.controlSection}>
+                <p style={{ margin: "8px 0", fontSize: 13 }}>
+                  {drawingLine
+                    ? "Click two points to draw the line, then a third point for the restricted side."
+                    : "Press the button below to start defining the line on the selected camera feed."}
+                </p>
                 <button
-                  style={styles.smallButton}
+                  style={styles.startButton}
                   onClick={() => {
-                    if (!drawingZone) {
-                      setDrawingZone(true);
-                      setZonePoints([]);
-                      setZoneClosed(false);
-                    } else if (zonePoints.length >= 3) {
-                      setZoneClosed(true);
-                      setDrawingZone(false);
-                    } else {
-                      setDrawingZone(false);
-                      setZonePoints([]);
+                    setDrawingLine(!drawingLine);
+                    if (!drawingLine) {
+                      setLinePoints([]);
+                      setRestrictedPoint(null);
                     }
                   }}
                   disabled={!videoReady}
                 >
-                  {!drawingZone ? "Draw Zone" : zonePoints.length >= 3 ? "Close Zone" : "Cancel"}
+                  {drawingLine ? "Cancel Draw" : "Draw Line"}
                 </button>
-              ) : (
-                <button
-                  style={{ ...styles.smallButton, background: "#dc2626" }}
-                  onClick={() => { setZonePoints([]); setZoneClosed(false); setDrawingZone(false); }}
-                >
-                  Clear Zone
-                </button>
-              )}
-              <p style={{ margin: "4px 0", fontSize: 12, color: "#9ca3af" }}>
-                Points: {zonePoints.length} {zoneClosed ? "(closed)" : ""}
+                {!videoReady && (
+                  <p style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>
+                    Wait for video to load before drawing
+                  </p>
+                )}
+              </div>
+            )}
+
+            {scenario === "zone_detection" && (
+              <div style={styles.controlSection}>
+                <p style={{ margin: "8px 0", fontSize: 13 }}>
+                  {drawingZone
+                    ? "Click to add zone points. Right-click or press Close Zone when done."
+                    : "Press Draw Zone to start defining a polygon on the camera feed."}
+                </p>
+                {!zoneClosed ? (
+                  <button
+                    style={styles.smallButton}
+                    onClick={() => {
+                      if (!drawingZone) {
+                        setDrawingZone(true);
+                        setZonePoints([]);
+                        setZoneClosed(false);
+                      } else if (zonePoints.length >= 3) {
+                        setZoneClosed(true);
+                        setDrawingZone(false);
+                      } else {
+                        setDrawingZone(false);
+                        setZonePoints([]);
+                      }
+                    }}
+                    disabled={!videoReady}
+                  >
+                    {!drawingZone ? "Draw Zone" : zonePoints.length >= 3 ? "Close Zone" : "Cancel"}
+                  </button>
+                ) : (
+                  <button
+                    style={{ ...styles.smallButton, background: "#dc2626" }}
+                    onClick={() => { setZonePoints([]); setZoneClosed(false); setDrawingZone(false); }}
+                  >
+                    Clear Zone
+                  </button>
+                )}
+              </div>
+            )}
+            
+            <div style={styles.thresholdControl}>
+              <label style={styles.thresholdLabel}>Inference Quality</label>
+              <div style={styles.sliderContainer}>
+                <CustomSlider
+                  min={1}
+                  max={3}
+                  step={1}
+                  value={4 - inferEvery}
+                  onChange={(val) => setInferEvery(4 - val)}
+                  style={{ flex: 1 }}
+                />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+                {["Performance", "Balanced", "Quality"].map((label, i) => (
+                  <span
+                    key={label}
+                    style={{
+                      fontSize: 18,
+                      fontFamily: "Google Sans Medium",
+                      fontWeight: (4 - inferEvery) === i + 1 ? 700 : 400,
+                      color: (4 - inferEvery) === i + 1 ? "#6e52bb" : "#6b7280",
+                      cursor: "pointer",
+                      flex: 1,
+                      textAlign: i === 0 ? "left" : i === 2 ? "right" : "center",
+                    }}
+                    onClick={() => setInferEvery(3 - i)}
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+              <p style={styles.thresholdDescription}>
+                {inferEvery === 1 ? "Every frame — highest accuracy, most GPU load" :
+                  inferEvery === 2 ? "Every 2nd frame — balanced accuracy and load" :
+                    "Every 3rd frame — lightest load, boxes persist between frames"}
               </p>
             </div>
-          )}
 
-
-        </div>
-
-        {/* THRESHOLD SETTINGS */}
-        <div style={styles.thresholdSection}>
-          <div style={styles.panelTitle}>Threshold Settings</div>
-
-          <div style={styles.thresholdControl}>
-            <label style={styles.thresholdLabel}>Inference Quality</label>
-            {/* Slider: 1=Quality, 2=Balanced, 3=Performance */}
-            <div style={styles.sliderContainer}>
-
-              <CustomSlider
-                min={1}
-                max={3}
-                step={1}
-                value={4 - inferEvery}
-                onChange={(val) => setInferEvery(4 - val)}
-                style={{ flex: 1 }}
-              />
-
+            <div style={styles.thresholdControl}>
+              <label style={styles.thresholdLabel}>Loitering Threshold</label>
+              <div style={styles.sliderContainer}>
+                <span style={{ minWidth: 64 }} />
+                <CustomSlider
+                  min={5}
+                  max={30}
+                  step={1}
+                  value={loiteringThreshold}
+                  onChange={(val) => setLoiteringThreshold(val)}
+                  style={{ flex: 1 }}
+                  showTicks={false}
+                />
+                <span style={{ ...styles.thresholdValue, minWidth: 48 }}>{loiteringThreshold}s</span>
+              </div>
             </div>
-            {/* Tick labels */}
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-              {["Performance", "Balanced", "Quality"].map((label, i) => (
-                <span
-                  key={label}
-                  style={{
-                    fontSize: 18,
-                    fontFamily: "Google Sans Medium",
-                    fontWeight: (4 - inferEvery) === i + 1 ? 700 : 400,
-                    color: (4 - inferEvery) === i + 1 ? "#06b6d4" : "#6b7280",
-                    cursor: "pointer",
-                    flex: 1,
-                    textAlign: i === 0 ? "left" : i === 2 ? "right" : "center",
-                  }}
-                  onClick={() => setInferEvery(3 - i)}
-                >
-                  {label}
-                </span>
-              ))}
-            </div>
-            <p style={styles.thresholdDescription}>
-              {inferEvery === 1 ? "Every frame — highest accuracy, most GPU load" :
-                inferEvery === 2 ? "Every 2nd frame — balanced accuracy and load" :
-                  "Every 3rd frame — lightest load, boxes persist between frames"}
-            </p>
+
           </div>
-
-          <div style={styles.thresholdControl}>
-            <label style={styles.thresholdLabel}>Loitering Threshold</label>
-            <div style={styles.sliderContainer}>
-              <span style={{ minWidth: 64 }} />
-              <CustomSlider
-                min={5}
-                max={30}
-                step={1}
-                value={loiteringThreshold}
-                onChange={(val) => setLoiteringThreshold(val)}
-                style={{ flex: 1 }}
-                showTicks={false}
-              />
-              <span style={{ ...styles.thresholdValue, minWidth: 48 }}>{loiteringThreshold}s</span>
-            </div>
-            <p style={styles.thresholdDescription}>Time in seconds to detect loitering</p>
-          </div>
-
-          <button style={styles.updateButton}>Update Thresholds</button>
-        </div>
-      </div>
-
-      {/* BOTTOM GRID */}
-      <div style={styles.bottomGrid}>
-        {/* RECORDED VIDEOS */}
-        <div style={styles.bottomPanel}>
-          <div style={styles.bottomPanelHeader}>
-            <div style={styles.panelTitle}>Recorded Videos</div>
-            <div style={styles.bottomButtons}>
-              <button style={styles.addButton} onClick={() => setShowAddCameraModal(true)}>+ Add Camera</button>
-              <button style={styles.uploadButton} onClick={handleUploadVideo}>Upload Video</button>
-            </div>
-          </div>
-
-          <div style={styles.tabsContainer}>
-            <button style={styles.tabActive}>Cameras</button>
-            <button style={styles.tabInactive}>Videos</button>
-          </div>
-
-          <p style={styles.emptyText}>No cameras configured</p>
-        </div>
-
-        {/* EVENT LOG */}
-        <div style={styles.bottomPanel}>
-          <div style={styles.panelTitle}>Event Log</div>
-          <p style={styles.emptyText2}>Recent surveillance events</p>
-          <p style={styles.emptyText}>No events recorded</p>
         </div>
       </div>
 
@@ -1273,26 +1666,84 @@ export default function Admin() {
           </div>
         </div>
       )}
-    </motion.div>
+
+      </motion.div>
+    </div>
   );
 }
 
 
 
 const styles: any = {
-  page: {
-    background: "#e6e4f4",
-    minHeight: "100vh",
-    color: "#374151",
+  sidebar: {
+    width: "250px",
+    background: "#ffffff",
+    padding: "24px 20px",
+    display: "flex",
+    flexDirection: "column" as const,
+    boxShadow: "10px 0px 20px rgba(166, 171, 189, 0.3), inset -2px 0px 8px rgba(0,0,0,0.02)",
+    zIndex: 10
+  },
+  sidebarLogoWrapper: {
+    display: "flex",
+    alignItems: "center",
+    marginBottom: "40px",
+    paddingLeft: "10px"
+  },
+  sidebarLogoIcon: {
+    fontSize: "24px",
+    marginRight: "12px"
+  },
+  sidebarLogoText: {
+    fontSize: "22px",
+    fontWeight: "700",
+    color: "#1a1a1a"
+  },
+  sidebarNav: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "12px",
+    flex: 1
+  },
+  sidebarNavItem: {
+    padding: "14px 20px",
+    borderRadius: "16px",
+    fontSize: "15px",
+    fontWeight: "600",
+    color: "#6b7280",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    transition: "all 0.2s ease",
+    background: "transparent",
+  },
+  sidebarNavItemActive: {
+    background: "linear-gradient(135deg, #a78bfa, #8b5cf6)",
+    color: "white",
+    boxShadow: "4px 4px 10px rgba(139, 92, 246, 0.3), -4px -4px 10px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)"
+  },
+  sidebarBottom: {
+    marginTop: "auto",
+    paddingTop: "20px"
+  },
+
+  pageContent: {
+    flex: 1,
     padding: "24px",
-    fontFamily: "Google Sans Medium"
+    overflowY: "auto" as const,
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "24px"
   },
 
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "28px"
+    background: "#ffffff",
+    padding: "16px 24px",
+    borderRadius: "24px",
+    boxShadow: "10px 10px 20px rgba(166, 171, 189, 0.6), -10px -10px 20px #ffffff, inset 2px 2px 8px rgba(255,255,255,0.8), inset -2px -2px 8px rgba(0,0,0,0.05)"
   },
 
   title: {
@@ -1341,10 +1792,9 @@ const styles: any = {
 
   mainGrid: {
     display: "grid",
-    gridTemplateColumns: "2fr 1fr",
-    gridTemplateRows: "auto auto",
+    gridTemplateColumns: "3fr 1fr",
     gap: "24px",
-    marginBottom: "24px"
+    alignItems: "start" as const
   },
 
   videoPanel: {
@@ -1626,20 +2076,20 @@ const styles: any = {
   },
 
   removeButton: {
-    background: "#fee2e2",
+    background: "#ef4444",
     border: "none",
-    color: "#ef4444",
-    cursor: "pointer",
-    fontSize: "16px",
+    color: "white",
+    fontSize: "14px",
+    fontWeight: "600",
     padding: "0",
-    width: "28px",
-    height: "28px",
+    width: "30px",
+    height: "30px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: "8px",
-    transition: "background 0.2s",
-    boxShadow: "inset 2px 2px 4px rgba(0,0,0,0.05), inset -2px -2px 4px rgba(255,255,255,0.8)"
+    borderRadius: "10px",
+    transition: "all 0.2s ease",
+    boxShadow: "4px 4px 10px rgba(239, 68, 68, 0.3), -4px -4px 10px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4), inset -2px -2px 4px rgba(0,0,0,0.15)"
   },
 
   cameraFeedContent: {

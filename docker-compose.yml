@@ -31,21 +31,19 @@ services:
       - "8000:8000"
     volumes:
       - ./videos:/app/videos
-    # To use USB cameras, uncomment and set your device paths:
-    # devices:
-    #   - /dev/video0:/dev/video0
-    #   - /dev/video1:/dev/video1
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: node:20
     container_name: smss_frontend
-    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host"
     depends_on:
       - backend
-    ports:
-      - "5173:80"
 
 volumes:
   pgdata:
