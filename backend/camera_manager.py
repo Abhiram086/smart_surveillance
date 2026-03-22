@@ -1,15 +1,17 @@
 """
 camera_manager.py  —  Single-model inference queue architecture
 
-Key fixes vs previous version:
-- infer_every now correctly read from per-camera cfg (was using global constant)
-- JPEG encoding moved to a separate thread pool to avoid blocking annotator
-- Reduced default JPEG quality for better throughput
-- Annotator skips frames if result queue falls behind
+Performance fixes for 4+ camera stability:
+- infer_every read from per-camera cfg (slider now works)
+- Annotate on RESIZED frame (not full-res) — major CPU/memory saving
+- Result queues capped at 2 — more aggressive drop, prevents backup
+- JPEG encoding stays in thread pool
+- Frame dedup hash — stream endpoint skips unchanged frames
 """
 
 from __future__ import annotations
 
+import hashlib
 import math
 import queue
 import threading
@@ -23,25 +25,24 @@ import torch
 from ultralytics import YOLO
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-MAX_CAMERAS     = 5
-INFER_WIDTH     = 640
-JPEG_QUALITY    = 65      # reduced from 75 — significant bandwidth/CPU saving
-CONF            = 0.35
-CLASSES         = [0]
-RECONNECT_DELAY = 2.0
+MAX_CAMERAS      = 5
+INFER_WIDTH      = 480      # reduced from 640 — less GPU work, still accurate
+ANNOTATE_WIDTH   = 640      # annotate at this width (downscaled from source)
+JPEG_QUALITY     = 60
+CONF             = 0.28   # lower threshold for better recall on overhead/distant shots
+CLASSES          = [0]
+RECONNECT_DELAY  = 2.0
 
-# Shared inference queue
-_infer_queue: queue.Queue = queue.Queue(maxsize=MAX_CAMERAS * 2)
+_infer_queue: queue.Queue = queue.Queue(maxsize=MAX_CAMERAS * 3)
 
-# Per-camera stores
 _result_queues: dict[str, queue.Queue]     = {}
 _latest_frames: dict[str, bytes | None]   = {}
+_latest_hashes: dict[str, bytes]          = {}   # for dedup in stream endpoint
 _frame_locks:   dict[str, threading.Lock] = {}
 _reader_stop:    dict[str, threading.Event] = {}
 _annotator_stop: dict[str, threading.Event] = {}
 _registry_lock = threading.Lock()
 
-# JPEG encoder pool — offloads imencode from annotator thread
 _jpeg_pool = ThreadPoolExecutor(max_workers=MAX_CAMERAS, thread_name_prefix="jpeg")
 
 # ── YOLO model ─────────────────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ def _get_model():
     if _model is None:
         with _model_lock:
             if _model is None:
-                print(f"[camera_manager] Loading YOLOv8s on {_device}...")
+                print(f"[camera_manager] Loading YOLOv8s on {_device} imgsz={INFER_WIDTH}...")
                 _model = YOLO("yolov8s")
                 try:
                     _model.fuse()
@@ -172,27 +173,27 @@ def _inference_thread_fn():
         if item is None:
             break
 
-        camera_id, infer_frame, scale, frame_orig, cfg = item
+        camera_id, infer_frame, ann_frame, scale_ann, cfg = item
         try:
             results = model.predict(
                 infer_frame,
                 classes=CLASSES,
                 conf=CONF,
+                iou=0.50,    # standard NMS IoU
                 device=_device,
                 imgsz=INFER_WIDTH,
                 verbose=False,
             )
         except Exception as exc:
-            print(f"[InferenceThread] predict error: {exc}")
+            print(f"[InferenceThread] error: {exc}")
             results = []
 
         rq = _result_queues.get(camera_id)
         if rq is not None:
-            # Drop oldest if full so annotator stays live
             if rq.full():
                 try: rq.get_nowait()
                 except queue.Empty: pass
-            try: rq.put_nowait((frame_orig, scale, results, cfg))
+            try: rq.put_nowait((ann_frame, scale_ann, results, cfg))
             except queue.Full: pass
 
         _infer_queue.task_done()
@@ -213,7 +214,7 @@ def _ensure_infer_thread():
 
 def _reader_thread_fn(camera_id: str, cfg: dict, stop: threading.Event):
     video       = cfg.get("video", 0)
-    infer_every = max(1, int(cfg.get("infer_every", 3)))  # use per-camera setting
+    infer_every = max(1, int(cfg.get("infer_every", 3)))
 
     print(f"[Reader:{camera_id[:8]}] opening {video}  infer_every={infer_every}")
 
@@ -239,7 +240,6 @@ def _reader_thread_fn(camera_id: str, cfg: dict, stop: threading.Event):
                 frame_base = frame_count
                 continue
 
-            # FPS lock
             elapsed = frame_count - frame_base
             target  = wall_start + elapsed * frame_t
             sleep_n = target - time.perf_counter()
@@ -249,15 +249,22 @@ def _reader_thread_fn(camera_id: str, cfg: dict, stop: threading.Event):
                 cap.grab(); frame_count += 1
 
             if frame_count % infer_every == 0:
-                h, w      = frame.shape[:2]
-                scale     = INFER_WIDTH / w
-                inf_frame = cv2.resize(frame, (INFER_WIDTH, int(h*scale)))
+                h, w = frame.shape[:2]
+
+                # Annotation frame — downscale to ANNOTATE_WIDTH to save CPU
+                ann_scale = ANNOTATE_WIDTH / w
+                ann_frame = cv2.resize(frame, (ANNOTATE_WIDTH, int(h * ann_scale)))
+
+                # Inference frame — further downscale to INFER_WIDTH
+                inf_scale = INFER_WIDTH / ANNOTATE_WIDTH
+                inf_frame = cv2.resize(ann_frame, (INFER_WIDTH, int(ann_frame.shape[0] * inf_scale)))
+
                 try:
                     _infer_queue.put_nowait(
-                        (camera_id, inf_frame, scale, frame.copy(), cfg)
+                        (camera_id, inf_frame, ann_frame, ann_scale, cfg)
                     )
                 except queue.Full:
-                    pass  # inference busy — drop
+                    pass
 
         cap.release()
         if not stop.is_set():
@@ -266,15 +273,18 @@ def _reader_thread_fn(camera_id: str, cfg: dict, stop: threading.Event):
     print(f"[Reader:{camera_id[:8]}] exited")
 
 
-# ── Annotator thread ───────────────────────────────────────────────────────────
+# ── JPEG encode + store ────────────────────────────────────────────────────────
 
 def _encode_and_store(frame: np.ndarray, camera_id: str, lk: threading.Lock):
-    """Encode JPEG in thread pool and store. Runs off the annotator thread."""
     ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     if ok:
+        b = buf.tobytes()
         with lk:
-            _latest_frames[camera_id] = buf.tobytes()
+            _latest_frames[camera_id] = b
+            _latest_hashes[camera_id] = hashlib.md5(b).digest()
 
+
+# ── Annotator thread ───────────────────────────────────────────────────────────
 
 def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
                          stop: threading.Event):
@@ -288,32 +298,41 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
         a = tuple(line[0]); b = tuple(line[1])
         r_sign = _side_of_line(tuple(restricted_point), a, b)
 
-    tracker    = _CentroidTracker()
+    tracker    = _CentroidTracker(max_lost=int(fps * 1.5))  # survive ~1.5s gap (loop boundary)
     cross_buf  = defaultdict(int)
     zone_buf   = defaultdict(int)
 
-    EMA_A       = 0.15
-    CONFIRM     = 12
-    MIN_SPD     = float(cfg.get("min_running_speed", 2.5))
-    MIN_DIST    = float(cfg.get("min_distance", 2.0))
-    LOITER_TIME = float(cfg.get("loiter_time", 10))
-    LOITER_RAD  = float(cfg.get("loiter_radius", 0.6))
-    IDLE, POS, RUN = 0, 1, 2
+    # ── Behaviour tuning ──────────────────────────────────────────────────────
+    EMA_A        = 0.10   # very slow smoothing — dampens spikes
+    # Running: must sustain fast movement for ~1.5 seconds AND travel real distance
+    CONFIRM      = int(fps * 1.5)
+    MIN_SPD      = float(cfg.get("min_running_speed", 4.0))   # raised — walking tops ~2.5
+    MIN_DIST     = float(cfg.get("min_distance", 4.0))
+    WALK_SPD     = MIN_SPD * 0.55   # walking band
+    RUN_EXIT_SPD = MIN_SPD * 0.45   # hysteresis — must slow down a lot to exit RUN
+    # Speed spike filter: ignore any single-frame speed > this multiple of current EMA
+    SPIKE_MULT   = 4.0
+    LOITER_TIME  = float(cfg.get("loiter_time", 10))
+    LOITER_RAD   = float(cfg.get("loiter_radius", 0.8))   # relaxed — groups have spread
+    IDLE, WALK, POS, RUN = 0, 1, 2, 3
 
-    t_hist    = defaultdict(lambda: deque(maxlen=300))
-    ema_spd   = defaultdict(float)
-    dist_bl   = defaultdict(float)
-    r_state   = defaultdict(lambda: IDLE)
-    r_cnt     = defaultdict(int)
-    loitering = defaultdict(bool)
-    loiter_f  = defaultdict(lambda: None)
-    frame_n   = 0
+    t_hist      = defaultdict(lambda: deque(maxlen=int(fps * 30)))  # 30s of history
+    ema_spd     = defaultdict(float)
+    dist_bl     = defaultdict(float)
+    r_state     = defaultdict(lambda: IDLE)
+    r_cnt       = defaultdict(int)
+    loitering   = defaultdict(bool)
+    # Wall-clock loiter start — survives video loops
+    loiter_wall_start: dict[int, float] = {}
+    loiter_total_secs: dict[int, float] = defaultdict(float)
 
     rq = _result_queues[camera_id]
     lk = _frame_locks[camera_id]
 
-    # Zone polygon as numpy array (computed once)
     zone_pts_np = np.array(zone, dtype=np.int32) if len(zone) >= 3 else None
+
+    # Scaled zone list (computed once)
+    scaled_zone_list: list = []
 
     while not stop.is_set():
         try:
@@ -321,8 +340,9 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
         except queue.Empty:
             continue
 
-        frame, scale, results, _ = item
-        frame_n += 1
+        ann_frame, ann_scale, results, _ = item
+
+        infer_to_ann = ANNOTATE_WIDTH / INFER_WIDTH
 
         boxes_raw = []
         for r in results:
@@ -330,23 +350,32 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
                 continue
             for box in r.boxes.xyxy:
                 x1,y1,x2,y2 = map(int, box)
-                x1=int(x1/scale); x2=int(x2/scale)
-                y1=int(y1/scale); y2=int(y2/scale)
+                x1=int(x1*infer_to_ann); x2=int(x2*infer_to_ann)
+                y1=int(y1*infer_to_ann); y2=int(y2*infer_to_ann)
                 boxes_raw.append((x1,y1,x2,y2))
 
         tracked = tracker.update(boxes_raw)
 
-        # Draw scenario overlay (once per frame, not per box)
+        def sc(v):
+            return int(v * ann_scale)
+
         if scenario == "metro_line" and a and b:
-            cv2.line(frame, a, b, (0,255,255), 2)
+            pa = (sc(a[0]), sc(a[1]))
+            pb = (sc(b[0]), sc(b[1]))
+            cv2.line(ann_frame, pa, pb, (0,255,255), 1)
 
         if scenario == "zone_detection" and zone_pts_np is not None:
-            ov = frame.copy()
-            cv2.fillPoly(ov, [zone_pts_np], (0,0,180))
-            cv2.addWeighted(ov, 0.20, frame, 0.80, 0, frame)
-            cv2.polylines(frame, [zone_pts_np], True, (0,0,255), 2)
-            cv2.putText(frame, "RESTRICTED ZONE", tuple(zone[0]),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
+            if not scaled_zone_list:
+                scaled_zone_list = [(int(p[0]*ann_scale), int(p[1]*ann_scale)) for p in zone]
+            sz = (zone_pts_np * ann_scale).astype(np.int32)
+            ov = ann_frame.copy()
+            cv2.fillPoly(ov, [sz], (0,0,180))
+            cv2.addWeighted(ov, 0.18, ann_frame, 0.82, 0, ann_frame)
+            cv2.polylines(ann_frame, [sz], True, (0,0,255), 1)
+            cv2.putText(ann_frame, "RESTRICTED ZONE", tuple(sz[0]),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0,0,255), 1)
+
+        now_wall = time.time()
 
         for (x1,y1,x2,y2,tid) in tracked:
             cx    = (x1+x2)//2
@@ -354,78 +383,130 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
             box_h = max(1, y2-y1)
 
             if scenario == "metro_line" and a and b:
-                sign  = _side_of_line((cx,cy), a, b)
-                if r_sign and sign * r_sign > 0:
+                pa = (sc(a[0]), sc(a[1]))
+                pb = (sc(b[0]), sc(b[1]))
+                pr = (sc(restricted_point[0]), sc(restricted_point[1]))
+                r_sign_s = _side_of_line(pr, pa, pb)
+                sign  = _side_of_line((cx,cy), pa, pb)
+                if r_sign_s and sign * r_sign_s > 0:
                     cross_buf[tid] += 1
                 else:
                     cross_buf[tid]  = 0
                 alert = cross_buf[tid] >= 3
                 color = (0,0,255) if alert else (0,255,0)
-                label = f"ID {tid} - RESTRICTED" if alert else f"ID {tid}"
+                label = f"#{tid} ALERT" if alert else f"#{tid}"
 
             elif scenario == "zone_detection" and zone_pts_np is not None:
-                if _point_in_polygon((cx,cy), zone):
+                if not scaled_zone_list:
+                    scaled_zone_list = [(int(p[0]*ann_scale), int(p[1]*ann_scale)) for p in zone]
+                if _point_in_polygon((cx,cy), scaled_zone_list):
                     zone_buf[tid] += 1
                 else:
                     zone_buf[tid]  = 0
                 alert = zone_buf[tid] >= 3
                 color = (0,0,255) if alert else (0,255,0)
-                label = f"ID {tid} - RESTRICTED" if alert else f"ID {tid}"
+                label = f"#{tid} ALERT" if alert else f"#{tid}"
 
             else:
-                t_hist[tid].append((cx,cy,box_h))
+                # ── Behaviour detection ──────────────────────────────────────
+                t_hist[tid].append((cx, cy, box_h, now_wall))
+
                 spd = 0.0
                 if len(t_hist[tid]) >= 2:
-                    px,py,ph = t_hist[tid][-2]
+                    px,py,ph,_ = t_hist[tid][-2]
                     d     = math.hypot(cx-px, cy-py)
                     avg_h = max(1,(box_h+ph)/2)
-                    spd   = (d/avg_h) * fps
+                    raw_spd = (d/avg_h) * fps
+
+                    # Spike filter: ignore implausible jumps (tracker ID switch,
+                    # momentary YOLO miss, or occlusion pop)
+                    cur_ema = ema_spd[tid]
+                    if cur_ema > 0.5 and raw_spd > cur_ema * SPIKE_MULT:
+                        raw_spd = cur_ema  # clamp to current estimate
+
+                    spd = raw_spd
                     dist_bl[tid] += d/avg_h
 
                 ema_spd[tid] = EMA_A*spd + (1-EMA_A)*ema_spd[tid]
                 s = ema_spd[tid]
 
+                # ── Running state machine ────────────────────────────────────
                 if r_state[tid] == IDLE:
-                    if s > MIN_SPD:
-                        r_state[tid]=POS; r_cnt[tid]=1; dist_bl[tid]=0.0
+                    if s > WALK_SPD:
+                        r_state[tid] = WALK
+                elif r_state[tid] == WALK:
+                    if s < WALK_SPD * 0.7:
+                        r_state[tid] = IDLE
+                    elif s > MIN_SPD:
+                        r_state[tid] = POS; r_cnt[tid] = 1; dist_bl[tid] = 0.0
                 elif r_state[tid] == POS:
-                    if s > MIN_SPD: r_cnt[tid]+=1
-                    else: r_state[tid]=IDLE; r_cnt[tid]=0; dist_bl[tid]=0.0
+                    if s > MIN_SPD:
+                        r_cnt[tid] += 1
+                        # dist_bl already accumulates above from d/avg_h
+                    else:
+                        r_state[tid] = WALK; r_cnt[tid] = 0; dist_bl[tid] = 0.0
                     if r_cnt[tid] >= CONFIRM and dist_bl[tid] >= MIN_DIST:
                         r_state[tid] = RUN
                 elif r_state[tid] == RUN:
-                    if s < MIN_SPD*0.55:
-                        r_state[tid]=IDLE; r_cnt[tid]=0; dist_bl[tid]=0.0
+                    if s < RUN_EXIT_SPD:
+                        r_state[tid] = WALK; r_cnt[tid] = 0; dist_bl[tid] = 0.0
 
-                req = int(fps * LOITER_TIME)
-                if len(t_hist[tid]) >= req:
-                    pts_l = list(t_hist[tid])[-req:]
-                    ah2   = max(1, np.mean([p[2] for p in pts_l]))
-                    xs    = [p[0] for p in pts_l]
-                    ys    = [p[1] for p in pts_l]
-                    spr   = math.hypot((max(xs)-min(xs))/ah2,
-                                       (max(ys)-min(ys))/ah2)
+                # ── Loitering — wall-clock based, survives video loops ────────
+                history = list(t_hist[tid])
+                cutoff  = now_wall - LOITER_TIME
+                recent  = [(x,y,h) for x,y,h,t in history if t >= cutoff]
+                all_pts = [(x,y,h) for x,y,h,t in history]
+
+                # Only need at least 3 seconds of history to start evaluating
+                three_sec_ago = now_wall - 3.0
+                early = [(x,y,h) for x,y,h,t in history if t >= three_sec_ago]
+
+                if len(early) >= max(3, int(fps * 1.0)):
+                    # Use median position to be robust against group-merge jitter
+                    xs_e  = sorted([p[0] for p in early])
+                    ys_e  = sorted([p[1] for p in early])
+                    med_x = xs_e[len(xs_e)//2]
+                    med_y = ys_e[len(ys_e)//2]
+                    ah2   = max(1, np.mean([p[2] for p in early]))
+                    # Spread = max deviation from median in body-lengths
+                    spr = max(
+                        max(abs(p[0]-med_x) for p in early) / ah2,
+                        max(abs(p[1]-med_y) for p in early) / ah2
+                    )
                     if spr < LOITER_RAD:
-                        if loiter_f[tid] is None: loiter_f[tid] = frame_n
-                        if frame_n - loiter_f[tid] > fps * LOITER_TIME:
+                        if tid not in loiter_wall_start:
+                            loiter_wall_start[tid] = now_wall - 3.0  # credit 3s already observed
+                        elapsed = now_wall - loiter_wall_start[tid]
+                        if elapsed >= LOITER_TIME:
                             loitering[tid] = True
                     else:
-                        loiter_f[tid] = None; loitering[tid] = False
-
-                if r_state[tid] == RUN:
-                    color=(0,0,255); label=f"RUNNING  {s:.1f} bl/s"
-                elif loitering[tid]:
-                    color=(255,0,0); label="LOITERING"
+                        loiter_wall_start.pop(tid, None)
+                        loitering[tid] = False
                 else:
-                    color=(0,255,0); label=f"ID {tid}  {s:.1f} bl/s"
+                    loiter_wall_start.pop(tid, None)
+                    loitering[tid] = False
 
-            cv2.rectangle(frame,(x1,y1),(x2,y2),color,2)
-            cv2.putText(frame,label,(x1,y1-10),
-                        cv2.FONT_HERSHEY_SIMPLEX,0.6,color,2)
-            cv2.circle(frame,(cx,cy),4,color,-1)
+                # ── Label ────────────────────────────────────────────────────
+                if r_state[tid] == RUN:
+                    color = (0,0,255)
+                    label = f"#{tid} RUNNING"
+                elif loitering[tid]:
+                    elapsed = now_wall - loiter_wall_start.get(tid, now_wall)
+                    color = (0,100,255)
+                    label = f"#{tid} LOITERING {int(elapsed)}s"
+                elif r_state[tid] in (POS, WALK):
+                    color = (0,200,0)
+                    label = f"#{tid} WALKING"
+                else:
+                    color = (0,255,0)
+                    label = f"#{tid}"
 
-        # Offload JPEG encoding to thread pool — keeps annotator unblocked
-        _jpeg_pool.submit(_encode_and_store, frame, camera_id, lk)
+            cv2.rectangle(ann_frame,(x1,y1),(x2,y2),color,1)
+            cv2.putText(ann_frame,label,(x1,max(10,y1-6)),
+                        cv2.FONT_HERSHEY_SIMPLEX,0.45,color,1)
+            cv2.circle(ann_frame,(cx,cy),3,color,-1)
+
+        _jpeg_pool.submit(_encode_and_store, ann_frame, camera_id, lk)
 
     print(f"[Annotator:{camera_id[:8]}] exited")
 
@@ -452,8 +533,9 @@ def start(camera_id: str, scenario: str, cfg: dict) -> None:
         cfg = dict(cfg, fps=fps)
 
         sr = threading.Event(); sa = threading.Event()
-        _result_queues[camera_id] = queue.Queue(maxsize=4)
+        _result_queues[camera_id] = queue.Queue(maxsize=2)   # cap at 2 — drop aggressively
         _latest_frames[camera_id] = None
+        _latest_hashes[camera_id] = b""
         _frame_locks[camera_id]   = threading.Lock()
         _reader_stop[camera_id]   = sr
         _annotator_stop[camera_id]= sa
@@ -470,7 +552,7 @@ def start(camera_id: str, scenario: str, cfg: dict) -> None:
 
 def _stop_locked(camera_id: str):
     for d in (_reader_stop, _annotator_stop, _result_queues,
-              _latest_frames, _frame_locks):
+              _latest_frames, _frame_locks, _latest_hashes):
         d.pop(camera_id, None)
 
 
@@ -497,6 +579,13 @@ def get_frame(camera_id: str) -> bytes | None:
     if lk is None: return None
     with lk:
         return _latest_frames.get(camera_id)
+
+
+def get_frame_hash(camera_id: str) -> bytes:
+    lk = _frame_locks.get(camera_id)
+    if lk is None: return b""
+    with lk:
+        return _latest_hashes.get(camera_id, b"")
 
 
 def status() -> list[dict]:
