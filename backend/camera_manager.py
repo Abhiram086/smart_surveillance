@@ -1,32 +1,11 @@
 """
 camera_manager.py  —  Single-model inference queue architecture
-----------------------------------------------------------------
 
-Architecture:
-  ┌─────────────────────────────────────────────────────────────┐
-  │  FrameReader threads (one per camera)                        │
-  │    • read frames from cv2.VideoCapture                       │
-  │    • apply FPS lock                                          │
-  │    • push every Nth frame → shared infer_queue               │
-  │                                                             │
-  │  InferenceThread (ONE, shared)                               │
-  │    • owns the SINGLE YOLO model instance                     │
-  │    • pops items from infer_queue one at a time               │
-  │    • runs model.predict() (no persist — avoids ID mixing)    │
-  │    • pushes results → per-camera result_queues               │
-  │                                                             │
-  │  AnnotatorThread (one per camera)                            │
-  │    • pops from its result_queue                              │
-  │    • runs spatial logic + centroid tracker                   │
-  │    • draws boxes, labels, overlays                           │
-  │    • writes JPEG → latest_frame[camera_id]                   │
-  │                                                             │
-  │  /cameras/stream/{id}  endpoint                              │
-  │    • reads latest_frame[camera_id] in an async drain loop    │
-  └─────────────────────────────────────────────────────────────┘
-
-All GPU calls are serialised through ONE thread → no CUDA contention.
-3 cameras = 3 readers + 1 shared inference thread + 3 annotators.
+Key fixes vs previous version:
+- infer_every now correctly read from per-camera cfg (was using global constant)
+- JPEG encoding moved to a separate thread pool to avoid blocking annotator
+- Reduced default JPEG quality for better throughput
+- Annotator skips frames if result queue falls behind
 """
 
 from __future__ import annotations
@@ -36,7 +15,7 @@ import queue
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -44,51 +23,51 @@ import torch
 from ultralytics import YOLO
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-MAX_CAMERAS    = 5
-INFER_EVERY    = 3       # run YOLO on every Nth frame; display all frames
-INFER_WIDTH    = 640
-JPEG_QUALITY   = 75
-CONF           = 0.35
-CLASSES        = [0]     # person only
+MAX_CAMERAS     = 5
+INFER_WIDTH     = 640
+JPEG_QUALITY    = 65      # reduced from 75 — significant bandwidth/CPU saving
+CONF            = 0.35
+CLASSES         = [0]
 RECONNECT_DELAY = 2.0
 
-# Shared inference queue (bounded so stale frames are dropped, not queued)
+# Shared inference queue
 _infer_queue: queue.Queue = queue.Queue(maxsize=MAX_CAMERAS * 2)
 
-# Per-camera result queues + frame stores
+# Per-camera stores
 _result_queues: dict[str, queue.Queue]     = {}
 _latest_frames: dict[str, bytes | None]   = {}
 _frame_locks:   dict[str, threading.Lock] = {}
-
-# Thread stop events
 _reader_stop:    dict[str, threading.Event] = {}
 _annotator_stop: dict[str, threading.Event] = {}
 _registry_lock = threading.Lock()
 
-# ── YOLO model (loaded once on first camera start) ─────────────────────────────
-_model: YOLO | None   = None
-_model_lock           = threading.Lock()
-_device: str          = "cuda" if torch.cuda.is_available() else "cpu"
-_infer_started        = False
-_infer_start_lock     = threading.Lock()
+# JPEG encoder pool — offloads imencode from annotator thread
+_jpeg_pool = ThreadPoolExecutor(max_workers=MAX_CAMERAS, thread_name_prefix="jpeg")
+
+# ── YOLO model ─────────────────────────────────────────────────────────────────
+_model            = None
+_model_lock       = threading.Lock()
+_device: str      = "cuda" if torch.cuda.is_available() else "cpu"
+_infer_started    = False
+_infer_start_lock = threading.Lock()
 
 
-def _get_model() -> YOLO:
+def _get_model():
     global _model
     if _model is None:
         with _model_lock:
             if _model is None:
-                print(f"[InferenceThread] Loading YOLOv8s on {_device}...")
+                print(f"[camera_manager] Loading YOLOv8s on {_device}...")
                 _model = YOLO("yolov8s")
                 try:
                     _model.fuse()
                 except Exception:
                     pass
-                print(f"[InferenceThread] Model ready.")
+                print("[camera_manager] Model ready.")
     return _model
 
 
-# ── Simple centroid tracker (per camera, independent) ──────────────────────────
+# ── Centroid tracker ───────────────────────────────────────────────────────────
 
 class _CentroidTracker:
     def __init__(self, max_lost: int = 15):
@@ -98,7 +77,6 @@ class _CentroidTracker:
         self.max_lost = max_lost
 
     def update(self, boxes: list) -> list:
-        """boxes: [(x1,y1,x2,y2), ...] → [(x1,y1,x2,y2,tid), ...]"""
         if not boxes:
             for tid in list(self.lost):
                 self.lost[tid] += 1
@@ -123,7 +101,6 @@ class _CentroidTracker:
         obj_ids = list(self.objects.keys())
         obj_c   = np.array([self.objects[t] for t in obj_ids])
 
-        # Greedy distance-based match
         cost = np.zeros((len(obj_ids), len(new_c)))
         for i, oc in enumerate(obj_c):
             for j, nc in enumerate(new_c):
@@ -182,7 +159,7 @@ def _point_in_polygon(point, polygon):
     return inside
 
 
-# ── Inference thread (singleton) ───────────────────────────────────────────────
+# ── Inference thread ───────────────────────────────────────────────────────────
 
 def _inference_thread_fn():
     model = _get_model()
@@ -206,11 +183,12 @@ def _inference_thread_fn():
                 verbose=False,
             )
         except Exception as exc:
-            print(f"[InferenceThread] error: {exc}")
+            print(f"[InferenceThread] predict error: {exc}")
             results = []
 
         rq = _result_queues.get(camera_id)
         if rq is not None:
+            # Drop oldest if full so annotator stays live
             if rq.full():
                 try: rq.get_nowait()
                 except queue.Empty: pass
@@ -234,11 +212,13 @@ def _ensure_infer_thread():
 # ── Frame reader thread ────────────────────────────────────────────────────────
 
 def _reader_thread_fn(camera_id: str, cfg: dict, stop: threading.Event):
-    video = cfg.get("video", 0)
-    print(f"[Reader:{camera_id[:8]}] opening {video}")
+    video       = cfg.get("video", 0)
+    infer_every = max(1, int(cfg.get("infer_every", 3)))  # use per-camera setting
+
+    print(f"[Reader:{camera_id[:8]}] opening {video}  infer_every={infer_every}")
 
     while not stop.is_set():
-        cap = cv2.VideoCapture(video if isinstance(video,int) else str(video))
+        cap = cv2.VideoCapture(video if isinstance(video, int) else str(video))
         if not cap.isOpened():
             print(f"[Reader:{camera_id[:8]}] cannot open, retry in {RECONNECT_DELAY}s")
             time.sleep(RECONNECT_DELAY)
@@ -255,21 +235,20 @@ def _reader_thread_fn(camera_id: str, cfg: dict, stop: threading.Event):
             ret, frame = cap.read()
             if not ret:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                wall_start  = time.perf_counter()
-                frame_base  = frame_count
+                wall_start = time.perf_counter()
+                frame_base = frame_count
                 continue
 
             # FPS lock
-            elapsed      = frame_count - frame_base
-            target       = wall_start + elapsed * frame_t
-            sleep_n      = target - time.perf_counter()
+            elapsed = frame_count - frame_base
+            target  = wall_start + elapsed * frame_t
+            sleep_n = target - time.perf_counter()
             if sleep_n > 0:
                 time.sleep(sleep_n)
             elif sleep_n < -(frame_t * 2):
                 cap.grab(); frame_count += 1
 
-            # Push every Nth frame to inference queue
-            if frame_count % INFER_EVERY == 0:
+            if frame_count % infer_every == 0:
                 h, w      = frame.shape[:2]
                 scale     = INFER_WIDTH / w
                 inf_frame = cv2.resize(frame, (INFER_WIDTH, int(h*scale)))
@@ -278,7 +257,7 @@ def _reader_thread_fn(camera_id: str, cfg: dict, stop: threading.Event):
                         (camera_id, inf_frame, scale, frame.copy(), cfg)
                     )
                 except queue.Full:
-                    pass  # inference thread busy — drop, don't stall reader
+                    pass  # inference busy — drop
 
         cap.release()
         if not stop.is_set():
@@ -287,7 +266,15 @@ def _reader_thread_fn(camera_id: str, cfg: dict, stop: threading.Event):
     print(f"[Reader:{camera_id[:8]}] exited")
 
 
-# ── Annotator thread ────────────────────────────────────────────────────────────
+# ── Annotator thread ───────────────────────────────────────────────────────────
+
+def _encode_and_store(frame: np.ndarray, camera_id: str, lk: threading.Lock):
+    """Encode JPEG in thread pool and store. Runs off the annotator thread."""
+    ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+    if ok:
+        with lk:
+            _latest_frames[camera_id] = buf.tobytes()
+
 
 def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
                          stop: threading.Event):
@@ -301,29 +288,32 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
         a = tuple(line[0]); b = tuple(line[1])
         r_sign = _side_of_line(tuple(restricted_point), a, b)
 
-    tracker     = _CentroidTracker()
-    cross_buf   = defaultdict(int)
-    zone_buf    = defaultdict(int)
+    tracker    = _CentroidTracker()
+    cross_buf  = defaultdict(int)
+    zone_buf   = defaultdict(int)
 
-    # Behaviour state
-    EMA_A          = 0.15
-    CONFIRM        = 12
-    MIN_SPD        = float(cfg.get("min_running_speed", 2.5))
-    MIN_DIST       = float(cfg.get("min_distance", 2.0))
-    LOITER_TIME    = float(cfg.get("loiter_time", 10))
-    LOITER_RAD     = float(cfg.get("loiter_radius", 0.6))
+    EMA_A       = 0.15
+    CONFIRM     = 12
+    MIN_SPD     = float(cfg.get("min_running_speed", 2.5))
+    MIN_DIST    = float(cfg.get("min_distance", 2.0))
+    LOITER_TIME = float(cfg.get("loiter_time", 10))
+    LOITER_RAD  = float(cfg.get("loiter_radius", 0.6))
     IDLE, POS, RUN = 0, 1, 2
 
-    t_hist     = defaultdict(lambda: deque(maxlen=300))
-    ema_spd    = defaultdict(float)
-    dist_bl    = defaultdict(float)
-    r_state    = defaultdict(lambda: IDLE)
-    r_cnt      = defaultdict(int)
-    loitering  = defaultdict(bool)
-    loiter_f   = defaultdict(lambda: None)
-    frame_n    = 0
+    t_hist    = defaultdict(lambda: deque(maxlen=300))
+    ema_spd   = defaultdict(float)
+    dist_bl   = defaultdict(float)
+    r_state   = defaultdict(lambda: IDLE)
+    r_cnt     = defaultdict(int)
+    loitering = defaultdict(bool)
+    loiter_f  = defaultdict(lambda: None)
+    frame_n   = 0
 
     rq = _result_queues[camera_id]
+    lk = _frame_locks[camera_id]
+
+    # Zone polygon as numpy array (computed once)
+    zone_pts_np = np.array(zone, dtype=np.int32) if len(zone) >= 3 else None
 
     while not stop.is_set():
         try:
@@ -334,7 +324,6 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
         frame, scale, results, _ = item
         frame_n += 1
 
-        # Parse detections
         boxes_raw = []
         for r in results:
             if not hasattr(r, 'boxes') or r.boxes is None:
@@ -347,16 +336,15 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
 
         tracked = tracker.update(boxes_raw)
 
-        # Scenario-level drawing
+        # Draw scenario overlay (once per frame, not per box)
         if scenario == "metro_line" and a and b:
             cv2.line(frame, a, b, (0,255,255), 2)
 
-        if scenario == "zone_detection" and len(zone) >= 3:
-            pts = np.array(zone, dtype=np.int32)
-            ov  = frame.copy()
-            cv2.fillPoly(ov, [pts], (0,0,180))
+        if scenario == "zone_detection" and zone_pts_np is not None:
+            ov = frame.copy()
+            cv2.fillPoly(ov, [zone_pts_np], (0,0,180))
             cv2.addWeighted(ov, 0.20, frame, 0.80, 0, frame)
-            cv2.polylines(frame, [pts], True, (0,0,255), 2)
+            cv2.polylines(frame, [zone_pts_np], True, (0,0,255), 2)
             cv2.putText(frame, "RESTRICTED ZONE", tuple(zone[0]),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
 
@@ -366,7 +354,7 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
             box_h = max(1, y2-y1)
 
             if scenario == "metro_line" and a and b:
-                sign = _side_of_line((cx,cy), a, b)
+                sign  = _side_of_line((cx,cy), a, b)
                 if r_sign and sign * r_sign > 0:
                     cross_buf[tid] += 1
                 else:
@@ -375,7 +363,7 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
                 color = (0,0,255) if alert else (0,255,0)
                 label = f"ID {tid} - RESTRICTED" if alert else f"ID {tid}"
 
-            elif scenario == "zone_detection" and len(zone) >= 3:
+            elif scenario == "zone_detection" and zone_pts_np is not None:
                 if _point_in_polygon((cx,cy), zone):
                     zone_buf[tid] += 1
                 else:
@@ -384,7 +372,7 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
                 color = (0,0,255) if alert else (0,255,0)
                 label = f"ID {tid} - RESTRICTED" if alert else f"ID {tid}"
 
-            else:  # behavior
+            else:
                 t_hist[tid].append((cx,cy,box_h))
                 spd = 0.0
                 if len(t_hist[tid]) >= 2:
@@ -436,14 +424,8 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
                         cv2.FONT_HERSHEY_SIMPLEX,0.6,color,2)
             cv2.circle(frame,(cx,cy),4,color,-1)
 
-        # Encode JPEG
-        ok, buf = cv2.imencode(".jpg", frame,
-                               [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-        if ok:
-            lk = _frame_locks.get(camera_id)
-            if lk:
-                with lk:
-                    _latest_frames[camera_id] = buf.tobytes()
+        # Offload JPEG encoding to thread pool — keeps annotator unblocked
+        _jpeg_pool.submit(_encode_and_store, frame, camera_id, lk)
 
     print(f"[Annotator:{camera_id[:8]}] exited")
 
@@ -460,7 +442,6 @@ def start(camera_id: str, scenario: str, cfg: dict) -> None:
         if alive >= MAX_CAMERAS:
             raise ValueError(f"Maximum simultaneous cameras ({MAX_CAMERAS}) reached.")
 
-        # Fetch FPS from source for annotator speed math
         video = cfg.get("video", 0)
         try:
             cap = cv2.VideoCapture(video if isinstance(video,int) else str(video))

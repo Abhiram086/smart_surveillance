@@ -210,6 +210,16 @@ export default function Admin() {
   const [zonePoints, setZonePoints] = useState<Array<{ x: number; y: number }>>([]);
   const [zoneClosed, setZoneClosed] = useState(false);
 
+  // clears all drawing state — call when switching camera or scenario
+  const clearDrawingState = () => {
+    setLinePoints([]);
+    setRestrictedPoint(null);
+    setDrawingLine(false);
+    setZonePoints([]);
+    setZoneClosed(false);
+    setDrawingZone(false);
+  };
+
   const handleStartScenario = async () => {
     if (!scenario) return;
 
@@ -613,68 +623,57 @@ export default function Admin() {
           </div>
         );
       }
-      // add SVG overlays (line + zone) always if we have video dims
+      // add SVG overlays ONLY for the selected camera being drawn on
       const dims = videoDims[camera.id];
-      if (dims) {
-        const makePct = (val: number, dim: number) => (val / dim) * 100;
-        // Line overlay
-        const linesPct = linePoints.map(p => ({
-          x: makePct(p.x, dims.w),
-          y: makePct(p.y, dims.h),
-        }));
-        const restrictedPct = restrictedPoint
-          ? { x: makePct(restrictedPoint.x, dims.w), y: makePct(restrictedPoint.y, dims.h) }
-          : null;
-        // Zone overlay
-        const zonePct = zonePoints.map(p => ({
-          x: makePct(p.x, dims.w),
-          y: makePct(p.y, dims.h),
-        }));
-        const zonePolyPts = zonePct.map(p => `${p.x}% ${p.y}%`).join(", ");
+      if (dims && camera.id === selectedCamera) {
+        // Use actual video pixel coords — matches what is sent to the backend.
+        // preserveAspectRatio="xMidYMid meet" mirrors objectFit:contain so the
+        // overlay aligns with the letterboxed video exactly.
+        const sw = Math.max(2, dims.w * 0.003);
 
         wrapped = (
           <div style={{ position: "relative", width: "100%", height: "100%" }}>
             {wrapped}
             <svg
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
+              viewBox={`0 0 ${dims.w} ${dims.h}`}
+              preserveAspectRatio="xMidYMid meet"
             >
               {/* Line crossing overlay */}
-              {linesPct.length >= 2 && (
+              {linePoints.length >= 2 && (
                 <line
-                  x1={linesPct[0].x} y1={linesPct[0].y}
-                  x2={linesPct[1].x} y2={linesPct[1].y}
-                  stroke="#f59e0b" strokeWidth="0.6" // slightly thicker line
+                  x1={linePoints[0].x} y1={linePoints[0].y}
+                  x2={linePoints[1].x} y2={linePoints[1].y}
+                  stroke="#f59e0b" strokeWidth={sw * 2}
                 />
               )}
-              {linesPct.map((p, i) => (
-                <circle key={i} cx={p.x} cy={p.y} r="1.2" fill="#f59e0b" /> // larger anchor points
+              {linePoints.map((p, i) => (
+                <circle key={i} cx={p.x} cy={p.y} r={sw * 4} fill="#f59e0b" />
               ))}
-              {restrictedPct && (
-                <circle cx={restrictedPct.x} cy={restrictedPct.y} r="1.8" fill="#ef4444" /> // bigger restricted point
+              {restrictedPoint && (
+                <circle cx={restrictedPoint.x} cy={restrictedPoint.y} r={sw * 5} fill="#ef4444" />
               )}
               {/* Zone overlay */}
-              {zonePct.length >= 2 && !zoneClosed && zonePct.map((p, i) => {
+              {zonePoints.length >= 2 && !zoneClosed && zonePoints.map((p, i) => {
                 if (i === 0) return null;
                 return (
                   <line
                     key={i}
-                    x1={zonePct[i - 1].x} y1={zonePct[i - 1].y}
+                    x1={zonePoints[i - 1].x} y1={zonePoints[i - 1].y}
                     x2={p.x} y2={p.y}
-                    stroke="#f97316" strokeWidth="0.6" strokeDasharray="1,0.5" // thicker zonal edge
+                    stroke="#f97316" strokeWidth={sw * 2} strokeDasharray={`${sw * 8},${sw * 4}`}
                   />
                 );
               })}
-              {zonePct.map((p, i) => (
-                <circle key={`zp-${i}`} cx={p.x} cy={p.y} r="1.2" fill="#f97316" />
+              {zonePoints.map((p, i) => (
+                <circle key={`zp-${i}`} cx={p.x} cy={p.y} r={sw * 4} fill="#f97316" />
               ))}
-              {zoneClosed && zonePct.length >= 3 && (
+              {zoneClosed && zonePoints.length >= 3 && (
                 <polygon
-                  points={zonePolyPts}
+                  points={zonePoints.map(p => `${p.x},${p.y}`).join(" ")}
                   fill="rgba(239,68,68,0.25)"
                   stroke="#ef4444"
-                  strokeWidth="0.6" // thicker closed zone border
+                  strokeWidth={sw * 2}
                 />
               )}
             </svg>
@@ -1125,6 +1124,7 @@ export default function Admin() {
                     onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.02)"}
                     onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
                     onClick={() => {
+                        clearDrawingState();
                         setSelectedCamera(cam.id);
                         setFullScreenCameraId(cam.id);
                     }}
@@ -1429,8 +1429,7 @@ export default function Admin() {
                           onMouseLeave={(e) => (e.currentTarget.style.background = scenario === opt.value || (!scenario && opt.value === "") ? "#f0f0f0" : "transparent")}
                           onClick={() => {
                             setScenario(opt.value || null);
-                            setLinePoints([]);
-                            setRestrictedPoint(null);
+                            clearDrawingState();
                             setScenarioDropdownOpen(false);
                           }}
                         >
