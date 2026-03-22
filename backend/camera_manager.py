@@ -520,8 +520,6 @@ def start(camera_id: str, scenario: str, cfg: dict) -> None:
         _stop_locked(camera_id)
 
         alive = sum(1 for ev in _reader_stop.values() if not ev.is_set())
-        if alive >= MAX_CAMERAS:
-            raise ValueError(f"Maximum simultaneous cameras ({MAX_CAMERAS}) reached.")
 
         video = cfg.get("video", 0)
         try:
