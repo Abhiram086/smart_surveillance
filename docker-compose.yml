@@ -31,6 +31,12 @@ services:
       - "8000:8000"
     volumes:
       - ./videos:/app/videos
+      - .:/app                      # bind mount entire project for hot reload
+    command: uvicorn app:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend --reload-dir /app/core --reload-dir /app/scenarios
+    # To use USB cameras, uncomment and set your device paths:
+    # devices:
+    #   - /dev/video0:/dev/video0
+    #   - /dev/video1:/dev/video1
 
   frontend:
     image: node:20

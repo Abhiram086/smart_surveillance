@@ -2,35 +2,62 @@ import { motion } from "framer-motion"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 
+type Mode = "login" | "register"
+
 export default function ViewerLogin() {
+  const [mode, setMode] = useState<Mode>("login")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
   const nav = useNavigate()
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setSuccess("")
     setLoading(true)
 
-    // Simulate login logic
-    setTimeout(() => {
-      if (username && password) {
-        console.log("Viewer login:", { username, password })
-        // Here you would typically make an API call
-        setLoading(false)
-        // nav to viewer dashboard after successful login
+    try {
+      if (mode === "login") {
+        const resp = await fetch("http://127.0.0.1:8000/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        })
+        const data = await resp.json()
+        if (!resp.ok) {
+          setError(data.detail || "Invalid username or password")
+        } else {
+          localStorage.setItem("auth_user", JSON.stringify(data.user))
+          nav("/viewer-dashboard")
+        }
       } else {
-        setError("Please enter username and password")
-        setLoading(false)
+        const resp = await fetch("http://127.0.0.1:8000/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password, role: "viewer" }),
+        })
+        const data = await resp.json()
+        if (!resp.ok) {
+          setError(data.detail || "Registration failed")
+        } else {
+          setSuccess("Viewer registered successfully. You can now log in.")
+          setMode("login")
+          setUsername("")
+          setPassword("")
+        }
       }
-    }, 1000)
+    } catch {
+      setError("Cannot reach server. Is the backend running?")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <div style={styles.wrapper}>
-      {/* Full screen background video */}
       <motion.video
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -44,7 +71,6 @@ export default function ViewerLogin() {
         <source src="/videos/16-9.mp4" type="video/mp4" />
       </motion.video>
 
-      {/* Full screen glass overlay with centered form */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -72,14 +98,30 @@ export default function ViewerLogin() {
             transition={{ delay: 0.25, duration: 0.6 }}
             style={styles.subtitle}
           >
-            Access live surveillance feeds
+            {mode === "login" ? "Access live surveillance feeds" : "Create a new viewer account"}
           </motion.p>
+
+          {/* Mode toggle */}
+          <div style={styles.toggle}>
+            <button
+              onClick={() => { setMode("login"); setError(""); setSuccess("") }}
+              style={{ ...styles.toggleBtn, ...(mode === "login" ? styles.toggleActive : {}) }}
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => { setMode("register"); setError(""); setSuccess("") }}
+              style={{ ...styles.toggleBtn, ...(mode === "register" ? styles.toggleActive : {}) }}
+            >
+              Register
+            </button>
+          </div>
 
           <motion.form
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3, duration: 0.6 }}
-            onSubmit={handleLogin}
+            onSubmit={handleSubmit}
             style={styles.form}
           >
             <motion.div
@@ -88,13 +130,13 @@ export default function ViewerLogin() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.4 }}
             >
-              <label style={styles.label}>Username or Email</label>
+              <label style={styles.label}>Username</label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 style={styles.input}
-                placeholder="Enter your credentials"
+                placeholder="Enter username"
                 required
               />
             </motion.div>
@@ -111,7 +153,7 @@ export default function ViewerLogin() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 style={styles.input}
-                placeholder="Enter your password"
+                placeholder="Enter password"
                 required
               />
             </motion.div>
@@ -124,6 +166,17 @@ export default function ViewerLogin() {
                 transition={{ duration: 0.3 }}
               >
                 {error}
+              </motion.div>
+            )}
+
+            {success && (
+              <motion.div
+                style={styles.successMsg}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {success}
               </motion.div>
             )}
 
@@ -142,9 +195,7 @@ export default function ViewerLogin() {
                 >
                   ⏳
                 </motion.span>
-              ) : (
-                "Sign In"
-              )}
+              ) : mode === "login" ? "Sign In" : "Register"}
             </motion.button>
           </motion.form>
 
@@ -175,20 +226,15 @@ const styles: any = {
     margin: 0,
     padding: 0
   },
-
   video: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
+    top: 0, left: 0,
+    width: "100%", height: "100%",
     objectFit: "cover",
     zIndex: 0
   },
-
   formSide: {
-    width: "100vw",
-    height: "100vh",
+    width: "100vw", height: "100vh",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -198,11 +244,9 @@ const styles: any = {
     padding: 0,
     zIndex: 5,
     position: "fixed",
-    top: 0,
-    left: 0,
+    top: 0, left: 0,
     margin: 0
   },
-
   formContainer: {
     display: "flex",
     flexDirection: "column",
@@ -211,7 +255,6 @@ const styles: any = {
     maxWidth: "420px",
     padding: "0 20px"
   },
-
   title: {
     fontSize: "2.8rem",
     fontWeight: 800,
@@ -223,15 +266,37 @@ const styles: any = {
     WebkitTextFillColor: "transparent",
     backgroundClip: "text"
   },
-
   subtitle: {
     fontSize: "0.95rem",
     fontWeight: 400,
     color: "#a0aec0",
-    marginBottom: 35,
+    marginBottom: 20,
     letterSpacing: "0.3px"
   },
-
+  toggle: {
+    display: "flex",
+    gap: 4,
+    marginBottom: 20,
+    background: "rgba(15, 23, 42, 0.5)",
+    borderRadius: 10,
+    padding: 4,
+    border: "1px solid rgba(255,255,255,0.08)"
+  },
+  toggleBtn: {
+    padding: "8px 28px",
+    borderRadius: 8,
+    border: "none",
+    background: "transparent",
+    color: "#94a3b8",
+    fontSize: "0.9rem",
+    fontWeight: 600,
+    cursor: "pointer",
+    transition: "all 0.2s"
+  },
+  toggleActive: {
+    background: "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)",
+    color: "white"
+  },
   form: {
     display: "flex",
     flexDirection: "column",
@@ -245,14 +310,12 @@ const styles: any = {
     border: "1px solid rgba(255, 255, 255, 0.08)",
     boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)"
   },
-
   formGroup: {
     display: "flex",
     flexDirection: "column",
     gap: 10,
     textAlign: "left"
   },
-
   label: {
     fontSize: "0.85rem",
     fontWeight: 600,
@@ -260,7 +323,6 @@ const styles: any = {
     textTransform: "uppercase",
     letterSpacing: "0.5px"
   },
-
   input: {
     padding: "14px 18px",
     borderRadius: "10px",
@@ -275,7 +337,6 @@ const styles: any = {
     backdropFilter: "blur(10px)",
     WebkitBackdropFilter: "blur(10px)"
   },
-
   error: {
     color: "#ffb3ba",
     fontSize: "0.85rem",
@@ -286,7 +347,16 @@ const styles: any = {
     fontWeight: 500,
     marginTop: 8
   },
-
+  successMsg: {
+    color: "#86efac",
+    fontSize: "0.85rem",
+    padding: "12px 14px",
+    background: "rgba(34, 197, 94, 0.1)",
+    borderRadius: "8px",
+    border: "1px solid rgba(34, 197, 94, 0.3)",
+    fontWeight: 500,
+    marginTop: 8
+  },
   submitBtn: {
     padding: "14px 32px",
     marginTop: 8,
@@ -302,14 +372,12 @@ const styles: any = {
     textTransform: "uppercase",
     letterSpacing: "0.5px"
   },
-
   backLink: {
     marginTop: 28,
     fontSize: "0.9rem",
     color: "#cbd5e1",
     fontWeight: 500
   },
-
   link: {
     color: "#60a5fa",
     textDecoration: "none",

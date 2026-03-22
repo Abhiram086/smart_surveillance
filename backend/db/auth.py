@@ -2,25 +2,32 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
+
 from psycopg2 import errors
 from psycopg2.extensions import connection
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-def _normalize_password(password: str) -> str:
-    """
-    bcrypt supports only 72 bytes.
-    Truncate safely to avoid runtime errors.
-    """
-    return password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+def _hash_password(password: str) -> str:
+    """Hash password with sha256 + random salt. No length limit."""
+    salt = os.urandom(32).hex()
+    h = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+    return f"{salt}${h}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    """Verify password against stored salt$hash."""
+    try:
+        salt, h = stored.split("$", 1)
+        return hashlib.sha256(f"{salt}{password}".encode()).hexdigest() == h
+    except Exception:
+        return False
 
 
 def register_user(conn: connection, username: str, password: str, role: str) -> dict:
     """Create a new user with hashed password."""
-    password = _normalize_password(password)
-    password_hash = pwd_context.hash(password)
+    password_hash = _hash_password(password)
 
     try:
         with conn.cursor() as cursor:
@@ -63,9 +70,7 @@ def authenticate_user(conn: connection, username: str, password: str) -> dict | 
     if row is None:
         return None
 
-    password = _normalize_password(password)
-
-    if not pwd_context.verify(password, row[2]):
+    if not _verify_password(password, row[2]):
         return None
 
     return {

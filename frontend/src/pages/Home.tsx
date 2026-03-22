@@ -2,11 +2,6 @@ import { motion } from "framer-motion"
 import { useState, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 
-const TEMP_CREDENTIALS = {
-  username: "admin",
-  password: "admin"
-}
-
 export default function Home() {
   const navigate = useNavigate()
   const [loginMode, setLoginMode] = useState<"landing" | "admin" | "viewer" | "register" | null>(null)
@@ -21,6 +16,7 @@ export default function Home() {
   const [hoveredRegister, setHoveredRegister] = useState(false)
   const [regUsername, setRegUsername] = useState("")
   const [regPassword, setRegPassword] = useState("")
+  const [regRole, setRegRole] = useState<"admin" | "viewer">("viewer")
 
   const titleContainerRef = useRef<HTMLDivElement>(null)
   const beamOverlayRef = useRef<HTMLDivElement>(null)
@@ -128,47 +124,60 @@ export default function Home() {
     setError("")
   }
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setLoading(true)
-    setTimeout(() => {
-      if (
-        adminUsername.trim() === TEMP_CREDENTIALS.username
-        && adminPassword === TEMP_CREDENTIALS.password
-      ) {
-        localStorage.setItem("authToken", "logged-in")
-        localStorage.setItem("role", "admin")
-        localStorage.setItem("username", adminUsername)
-
-        navigate("/admin-dashboard")
-        setLoading(false)
+    try {
+      const resp = await fetch("http://127.0.0.1:8000/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: adminUsername, password: adminPassword }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        setError(data.detail || "Invalid username or password")
+      } else if (data.user.role !== "admin") {
+        setError("This account is not an admin")
       } else {
-        setError("Invalid credentials. Use admin / admin.")
-        setLoading(false)
+        localStorage.setItem("authToken", "logged-in")
+        localStorage.setItem("role", data.user.role)
+        localStorage.setItem("username", data.user.username)
+        navigate("/admin-dashboard")
       }
-    }, 1000)
+    } catch {
+      setError("Cannot reach server. Is the backend running?")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleViewerLogin = (e: React.FormEvent) => {
+  const handleViewerLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setLoading(true)
-    setTimeout(() => {
-      if (
-        viewerUsername.trim() === TEMP_CREDENTIALS.username
-        && viewerPassword === TEMP_CREDENTIALS.password
-      ) {
-        localStorage.setItem("authToken", "logged-in")
-        localStorage.setItem("role", "viewer")
-        localStorage.setItem("username", viewerUsername)
-
-        navigate("/viewer-dashboard")
+    try {
+      const resp = await fetch("http://127.0.0.1:8000/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: viewerUsername, password: viewerPassword }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        setError(data.detail || "Invalid username or password")
+      } else if (data.user.role !== "viewer") {
+        setError("This account is not a viewer")
       } else {
-        setError("Invalid credentials. Use admin / admin.")
-        setLoading(false)
+        localStorage.setItem("authToken", "logged-in")
+        localStorage.setItem("role", data.user.role)
+        localStorage.setItem("username", data.user.username)
+        navigate("/viewer-dashboard")
       }
-    }, 1000)
+    } catch {
+      setError("Cannot reach server. Is the backend running?")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleRegisterClick = () => {
@@ -176,19 +185,30 @@ export default function Home() {
     setError("")
   }
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setLoading(true)
-    setTimeout(() => {
-      if (regUsername && regPassword) {
-        console.log("Register:", { regUsername })
-        setLoading(false)
+    try {
+      const resp = await fetch("http://127.0.0.1:8000/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: regUsername, password: regPassword, role: regRole }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        setError(data.detail || "Registration failed")
       } else {
-        setError("Please enter username and password")
-        setLoading(false)
+        setRegUsername("")
+        setRegPassword("")
+        setLoginMode(regRole)
+        setError("Registered successfully! Please log in.")
       }
-    }, 1000)
+    } catch {
+      setError("Cannot reach server. Is the backend running?")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -438,8 +458,32 @@ export default function Home() {
 
               {error && <div style={styles.error}>{error}</div>}
 
-              {(loginMode === "admin" || loginMode === "viewer") && (
-                <div style={styles.helperText}>Temporary login: admin / admin</div>
+              {loginMode === "register" && (
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Register as</label>
+                  <div style={styles.roleToggle}>
+                    <button
+                      type="button"
+                      onClick={() => setRegRole("viewer")}
+                      style={{
+                        ...styles.roleBtn,
+                        ...(regRole === "viewer" ? styles.roleBtnActive : {})
+                      }}
+                    >
+                      Viewer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRegRole("admin")}
+                      style={{
+                        ...styles.roleBtn,
+                        ...(regRole === "admin" ? styles.roleBtnActiveAdmin : {})
+                      }}
+                    >
+                      Admin
+                    </button>
+                  </div>
+                </div>
               )}
 
               <motion.button
@@ -799,6 +843,37 @@ const styles: any = {
     fontWeight: 500,
     cursor: "pointer",
     transition: "opacity 0.3s ease"
+  },
+
+  roleToggle: {
+    display: "flex",
+    gap: 8,
+    width: "100%"
+  },
+
+  roleBtn: {
+    flex: 1,
+    padding: "10px",
+    borderRadius: 8,
+    border: "1px solid #e2e8f0",
+    background: "#f8fafc",
+    color: "#64748b",
+    fontSize: "0.95rem",
+    fontWeight: 600,
+    cursor: "pointer",
+    transition: "all 0.2s ease"
+  },
+
+  roleBtnActive: {
+    background: "#1e3a8a",
+    color: "white",
+    border: "1px solid #1e3a8a"
+  },
+
+  roleBtnActiveAdmin: {
+    background: "#7f1d1d",
+    color: "white",
+    border: "1px solid #7f1d1d"
   },
 
   beamClipWrapper: {
