@@ -1,12 +1,4 @@
-"""
-camera_manager.py  —  Single-model inference queue architecture
 
-Merged version:
-- Friend's stats system: _add_event, get_stats, _camera_stats, analysis_complete
-- Original's hash dedup: _latest_hashes, get_frame_hash (used by app.py stream endpoint)
-- Original's two-stage resize: INFER_WIDTH + ANNOTATE_WIDTH, ThreadPoolExecutor for JPEG
-- infer_every read from per-camera cfg (slider works)
-"""
 
 from __future__ import annotations
 
@@ -26,7 +18,7 @@ import torch
 from ultralytics import YOLO
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-MAX_CAMERAS     = 5
+MAX_CAMERAS     = 100
 INFER_WIDTH     = 480       # inference resolution — less GPU work
 ANNOTATE_WIDTH  = 640       # annotate at this width (downscaled from source)
 JPEG_QUALITY    = 60
