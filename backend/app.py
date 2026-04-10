@@ -329,3 +329,118 @@ def api_clear_events():
     """Clear all in-memory events — called when the admin page loads."""
     camera_manager.clear_all_events()
     return {"cleared": True}
+
+@app.get("/api/stats")
+def api_stats():
+    """Returns the latest aggregated stats and events across all active cameras."""
+    return camera_manager.get_stats()
+
+
+@app.post("/api/clear-events")
+def api_clear_events():
+    """Clear all in-memory events — called when the admin page loads."""
+    camera_manager.clear_all_events()
+    return {"cleared": True}
+
+
+# ── Data Persistence / Config Endpoints ─────────────────────────────────────
+
+from typing import Any, Dict
+from pydantic import BaseModel
+from db.config_queries import (
+    get_admin_settings,
+    upsert_admin_settings,
+    get_camera_configs,
+    upsert_camera_config,
+    delete_camera_config,
+)
+
+class AdminSettingsPayload(BaseModel):
+    admin_id: str
+    continuous_running: bool
+
+class CameraConfigPayload(BaseModel):
+    camera_id: str
+    admin_id: str
+    config_json: Dict[str, Any]
+
+@app.get("/api/config/settings/{admin_id}")
+def api_get_admin_settings(admin_id: str, conn: connection = Depends(get_db_connection)):
+    settings = get_admin_settings(conn, admin_id)
+    if not settings:
+        return {"admin_id": admin_id, "continuous_running": False}
+    return settings
+
+@app.post("/api/config/settings")
+def api_upsert_admin_settings(payload: AdminSettingsPayload, conn: connection = Depends(get_db_connection)):
+    upsert_admin_settings(conn, payload.admin_id, payload.continuous_running)
+    return {"status": "success", "settings": getattr(payload, "model_dump", payload.dict)()}
+
+@app.get("/api/config/cameras/{admin_id}")
+def api_get_camera_configs(admin_id: str, conn: connection = Depends(get_db_connection)):
+    configs = get_camera_configs(conn, admin_id)
+    return {"admin_id": admin_id, "cameras": configs}
+
+@app.post("/api/config/cameras")
+def api_upsert_camera_config(payload: CameraConfigPayload, conn: connection = Depends(get_db_connection)):
+    upsert_camera_config(conn, payload.camera_id, payload.admin_id, payload.config_json)
+    return {"status": "success", "camera_id": payload.camera_id}
+
+@app.delete("/api/config/cameras/{camera_id}")
+def api_delete_camera_config(camera_id: str, conn: connection = Depends(get_db_connection)):
+    delete_camera_config(conn, camera_id)
+    return {"status": "success", "deleted": camera_id}
+
+@app.get("/api/cameras/live-status/{admin_id}")
+def api_live_status(admin_id: str):
+    # Retrieve active threads/cameras from memory
+    active_cameras = [cam_id for cam_id, state in camera_manager.status().items() if state.get("is_running", True)]
+    return {"admin_id": admin_id, "active_cameras": active_cameras}
+
+
+# ── Auto-Boot Sequence ────────────────────────────────────────────────────────
+
+@app.on_event("startup")
+def auto_boot_cameras() -> None:
+    """Auto-starts background inference for admins with continuous_running enabled."""
+    print("Starting auto-boot sequence...")
+    db_dep = get_db_connection()
+    try:
+        conn = next(db_dep)
+        with conn.cursor() as cursor:
+            # 1. Query for all admins where continuous_running is TRUE
+            cursor.execute("SELECT admin_id FROM admin_settings WHERE continuous_running = TRUE")
+            active_admins = cursor.fetchall()
+            
+            # 2. Iterate each active admin and fetch their camera_configs
+            for (admin_id,) in active_admins:
+                configs = get_camera_configs(conn, admin_id)
+                
+                # 3. Loop through those configs
+                for cam in configs:
+                    cam_id = cam["camera_id"]
+                    cfg = cam["config_json"]
+                    
+                    # Ensure scenario exists or gracefully default to a valid one
+                    scenario = cfg.get("scenario", "behavior")
+                    
+                    # 4. Wrap internally in try/except so one failure doesn't crash all boot
+                    try:
+                        camera_manager.start(cam_id, scenario, cfg)
+                        print(f"Auto-booted camera {cam_id} for admin: {admin_id}")
+                    except Exception as e:
+                        print(f"Failed to auto-boot camera {cam_id}: {e}")
+                        
+    except Exception as e:
+        print(f"Error during main auto-boot query sequence: {e}")
+    finally:
+        db_dep.close()
+
+@app.post("/api/system/reset")
+def reset_system():
+    """Panic button: kills all cameras and wipes all stats/events."""
+    camera_manager.stop_all()
+    camera_manager.clear_all_events()
+    return {"reset": True}
+
+

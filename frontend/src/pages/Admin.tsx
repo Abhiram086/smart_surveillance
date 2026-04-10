@@ -146,15 +146,48 @@ export default function Admin() {
   const [behaviorConf, setBehaviorConf] = useState({ normal: 100, loitering: 0, fast_movement: 0 });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  
+
   const [activeReport, setActiveReport] = useState<any>(null);
   const dismissedReportsRef = React.useRef<Set<string>>(new Set());
   const [activeEventTab, setActiveEventTab] = useState<'events' | 'alerts'>('events');
   const [eventViewMode, setEventViewMode] = useState<'timeline' | 'source'>('source');
 
-  // Clear stale events from previous sessions on mount
+  // Hydrate dashboard or purge ghost workers
   React.useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/clear-events", { method: "POST" }).catch(() => {});
+    const hydrateOrPurge = async () => {
+      try {
+        const userStr = localStorage.getItem("auth_user");
+        if (!userStr) throw new Error("No user");
+        const user = JSON.parse(userStr);
+        
+        const res = await fetch(`http://127.0.0.1:8000/api/config/cameras/${user.id}`);
+        if (!res.ok) throw new Error("No DB configs");
+        
+        const configs = await res.json();
+        if (configs && configs.length > 0) {
+          const restored = configs.map((db: any) => ({
+            id: db.camera_id,
+            name: db.config_json.camera_name || "Restored Camera",
+            scenario: db.config_json.scenario,
+            status: "Active",
+            source: `http://127.0.0.1:8000/cameras/stream/${db.camera_id}`,
+            type: "ip"
+          }));
+          setCameras(restored);
+          setSelectedCamera(restored[0].id);
+          const runMap: any = {};
+          restored.forEach((c: any) => runMap[c.id] = { scenario: c.scenario, saved: c });
+          setCameraRunning(runMap);
+          setStatus("Running");
+          return; 
+        }
+      } catch (e) {
+        console.log("No saved cameras found, purging ghosts...");
+      }
+      // If no cameras were loaded, forcefully nuke the backend ghosts
+      fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(()=>{});
+    };
+    hydrateOrPurge();
   }, []);
 
   // Format Unix timestamp using browser local time: "03:09:42 AM"
@@ -309,7 +342,7 @@ export default function Admin() {
     setStatus("Running");
     setDrawingLine(false);
     setDrawingZone(false);
-    
+
     if (selectedCamera) {
       dismissedReportsRef.current.delete(selectedCamera);
     }
@@ -607,11 +640,24 @@ export default function Admin() {
     }
   };
 
-  const handleRemoveCamera = (id: string) => {
+  const handleRemoveCamera = async (id: string) => {
+    try {
+      await fetch("http://127.0.0.1:8000/cameras/stop?camera_id=" + id, { method: "POST" });
+      await fetch("http://127.0.0.1:8000/api/config/cameras/" + id, { method: "DELETE" });
+    } catch (err) {
+      console.error(err);
+    }
+    
     const filtered = cameras.filter(cam => cam.id !== id);
     setCameras(filtered);
     if (selectedCamera === id) {
       setSelectedCamera(filtered.length > 0 ? filtered[0].id : null);
+    }
+    
+    // If we just deleted the very last camera, force-reset the system stats to zero
+    if (filtered.length === 0) {
+      fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(()=>{});
+      setStatus("Idle");
     }
   };
 
@@ -870,8 +916,8 @@ export default function Admin() {
   // Threat Assessment Radar Calculation
   // Count loitering and running events from the event log for radar
   const loiteringEventCount = events.filter((e: any) => e.message && e.message.toLowerCase().includes('loiter')).length;
-  const runningEventCount   = events.filter((e: any) => e.message && e.message.toLowerCase().includes('running')).length;
-  const alertEventCount     = events.filter((e: any) => e.severity === 'error' || e.severity === 'warning').length;
+  const runningEventCount = events.filter((e: any) => e.message && e.message.toLowerCase().includes('running')).length;
+  const alertEventCount = events.filter((e: any) => e.severity === 'error' || e.severity === 'warning').length;
 
   const threatStats = [
     Math.max(5, Math.min(100, (peopleCount / 20) * 100)),                           // Crowd density
@@ -915,7 +961,7 @@ export default function Admin() {
       `}</style>
 
       {/* SCROLL TRANSITION TOP BAR */}
-      <div 
+      <div
         style={{
           position: "fixed",
           top: 0, left: 0, right: 0,
@@ -931,7 +977,7 @@ export default function Admin() {
       />
 
       {/* ALWAYS VISIBLE LOGO (absolute/fixed) */}
-      <div 
+      <div
         style={{ ...styles.sidebarLogoWrapper, position: "fixed", top: "24px", left: "24px", zIndex: 1000, cursor: "pointer", paddingLeft: 0, marginBottom: 0 }}
         onClick={(e) => { e.stopPropagation(); setIsSidebarOpen(!isSidebarOpen); }}
       >
@@ -1103,7 +1149,7 @@ export default function Admin() {
             <div style={styles.videoPanel}>
               <div style={styles.videoPanelHeader}>
                 <div style={styles.panelTitle}>
-                  {fullScreenCameraId 
+                  {fullScreenCameraId
                     ? cameras.find(c => c.id === fullScreenCameraId)?.name || 'Camera Feed'
                     : 'Glance Overview'}
                 </div>
@@ -1370,12 +1416,12 @@ export default function Admin() {
                     {Array.from({ length: 5 }).map((_, i) => {
                       const angle = (Math.PI * -0.5) + (i * ((Math.PI * 2) / 5));
                       return (
-                        <line 
-                          key={i} 
-                          x1="100" y1="100" 
-                          x2={100 + 100 * Math.cos(angle)} 
-                          y2={100 + 100 * Math.sin(angle)} 
-                          stroke="#e5e7eb" strokeWidth="1" 
+                        <line
+                          key={i}
+                          x1="100" y1="100"
+                          x2={100 + 100 * Math.cos(angle)}
+                          y2={100 + 100 * Math.sin(angle)}
+                          stroke="#e5e7eb" strokeWidth="1"
                         />
                       );
                     })}
@@ -1385,7 +1431,7 @@ export default function Admin() {
                   <svg width="200" height="200" style={{ position: "absolute", zIndex: 5, transition: "all 0.5s ease" }}>
                     <polygon points={polygonPoints} fill="rgba(139, 92, 246, 0.3)" stroke="#8b5cf6" strokeWidth="2" style={{ transition: "all 0.5s ease" }} />
                   </svg>
-                  
+
                   {/* Vector Labels */}
                   <div style={{ position: "absolute", top: "0px", left: "50%", transform: "translateX(-50%)", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Crowd</div>
                   <div style={{ position: "absolute", top: "35%", right: "-5px", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Activity</div>
@@ -1454,13 +1500,13 @@ export default function Admin() {
             <div style={{ ...styles.controlPanel, height: "450px", display: "flex", flexDirection: "column" }}>
               <div style={{ ...styles.tabsContainer, justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: "12px" }}>
-                  <button 
+                  <button
                     style={activeEventTab === 'events' ? styles.tabActive : styles.tabInactive}
                     onClick={() => setActiveEventTab('events')}
                   >
                     Event Log
                   </button>
-                  <button 
+                  <button
                     style={activeEventTab === 'alerts' ? styles.tabActive : styles.tabInactive}
                     onClick={() => setActiveEventTab('alerts')}
                   >
@@ -1468,10 +1514,10 @@ export default function Admin() {
                   </button>
                 </div>
                 <div style={{ display: "flex", background: "#f3f4f6", borderRadius: "10px", padding: "2px" }}>
-                  <button 
+                  <button
                     onClick={() => setEventViewMode('timeline')}
-                    style={{ 
-                      padding: "4px 8px", fontSize: "10px", borderRadius: "8px", border: "none", 
+                    style={{
+                      padding: "4px 8px", fontSize: "10px", borderRadius: "8px", border: "none",
                       background: eventViewMode === 'timeline' ? "white" : "transparent",
                       boxShadow: eventViewMode === 'timeline' ? "0 2px 4px rgba(0,0,0,0.05)" : "none",
                       color: eventViewMode === 'timeline' ? "#1a1a1a" : "#6b7280",
@@ -1480,10 +1526,10 @@ export default function Admin() {
                   >
                     Timeline
                   </button>
-                  <button 
+                  <button
                     onClick={() => setEventViewMode('source')}
-                    style={{ 
-                      padding: "4px 8px", fontSize: "10px", borderRadius: "8px", border: "none", 
+                    style={{
+                      padding: "4px 8px", fontSize: "10px", borderRadius: "8px", border: "none",
                       background: eventViewMode === 'source' ? "white" : "transparent",
                       boxShadow: eventViewMode === 'source' ? "0 2px 4px rgba(0,0,0,0.05)" : "none",
                       color: eventViewMode === 'source' ? "#1a1a1a" : "#6b7280",
@@ -1497,7 +1543,7 @@ export default function Admin() {
 
               <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "10px", padding: "10px 0" }}>
                 {(() => {
-                  const filtered = activeEventTab === 'alerts' 
+                  const filtered = activeEventTab === 'alerts'
                     ? events.filter(e => e.severity === 'error' || e.severity === 'warning')
                     : events;
 
@@ -1885,12 +1931,12 @@ export default function Admin() {
                           {Array.from({ length: 5 }).map((_, i) => {
                             const angle = (Math.PI * -0.5) + (i * ((Math.PI * 2) / 5));
                             return (
-                              <line 
-                                key={i} 
-                                x1="100" y1="100" 
-                                x2={100 + 100 * Math.cos(angle)} 
-                                y2={100 + 100 * Math.sin(angle)} 
-                                stroke="#e5e7eb" strokeWidth="1" 
+                              <line
+                                key={i}
+                                x1="100" y1="100"
+                                x2={100 + 100 * Math.cos(angle)}
+                                y2={100 + 100 * Math.sin(angle)}
+                                stroke="#e5e7eb" strokeWidth="1"
                               />
                             );
                           })}
@@ -1899,7 +1945,7 @@ export default function Admin() {
                         <svg width="200" height="200" style={{ position: "absolute", zIndex: 5, transition: "all 0.5s ease" }}>
                           <polygon points={polygonPoints} fill="rgba(139, 92, 246, 0.4)" stroke="#8b5cf6" strokeWidth="2" style={{ transition: "all 0.5s ease" }} />
                         </svg>
-                        
+
                         <div style={{ position: "absolute", top: "0px", left: "50%", transform: "translateX(-50%)", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Crowd</div>
                         <div style={{ position: "absolute", top: "35%", right: "-5px", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Activity</div>
                         <div style={{ position: "absolute", bottom: "0px", right: "15%", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Alerts</div>
@@ -1941,10 +1987,10 @@ export default function Admin() {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div style={{ marginTop: "24px", display: "flex", justifyContent: "center" }}>
                     <button onClick={() => setActiveReport(null)} style={{ padding: "12px 32px", borderRadius: "24px", background: "#f9fafb", border: "1px solid #d1d5db", fontWeight: 600, color: "#374151", cursor: "pointer", fontSize: "16px" }}>
-                        Close
+                      Close
                     </button>
                   </div>
                 </motion.div>
