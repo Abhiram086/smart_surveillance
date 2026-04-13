@@ -145,10 +145,6 @@ export default function Viewer() {
               <div style={{ display: "grid", gridTemplateColumns: cameras.length === 1 ? "1fr" : "1fr 1fr", gap: "20px" }}>
                 {cameras.map(cam => (
                   <div key={cam.id} style={{ background: "black", borderRadius: "16px", overflow: "hidden", border: "1px solid #374151" }}>
-                    <div style={{ padding: "12px 16px", background: "#27272a", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontWeight: "bold", fontSize: "14px" }}>{cam.name}</span>
-                      <span style={{ fontSize: "12px", color: "#a78bfa" }}>{cam.scenario}</span>
-                    </div>
                     <img src={cam.source} alt="Live Feed" style={{ width: "100%", aspectRatio: "16/9", objectFit: "contain", display: "block" }} />
                   </div>
                 ))}
