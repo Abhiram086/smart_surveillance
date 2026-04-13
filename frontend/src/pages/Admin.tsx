@@ -152,42 +152,52 @@ export default function Admin() {
   const [activeEventTab, setActiveEventTab] = useState<'events' | 'alerts'>('events');
   const [eventViewMode, setEventViewMode] = useState<'timeline' | 'source'>('source');
 
-  // Hydrate dashboard or purge ghost workers
   React.useEffect(() => {
-    const hydrateOrPurge = async () => {
+    const loadDatabase = async () => {
+      const adminId = "global_admin"; 
+      
       try {
-        const userStr = localStorage.getItem("auth_user");
-        if (!userStr) throw new Error("No user");
-        const user = JSON.parse(userStr);
-        
-        const res = await fetch(`http://127.0.0.1:8000/api/config/cameras/${user.id}`);
-        if (!res.ok) throw new Error("No DB configs");
-        
-        const configs = await res.json();
-        if (configs && configs.length > 0) {
-          const restored = configs.map((db: any) => ({
-            id: db.camera_id,
-            name: db.config_json.camera_name || "Restored Camera",
-            scenario: db.config_json.scenario,
-            status: "Active",
-            source: `http://127.0.0.1:8000/cameras/stream/${db.camera_id}`,
-            type: "ip"
-          }));
-          setCameras(restored);
-          setSelectedCamera(restored[0].id);
-          const runMap: any = {};
-          restored.forEach((c: any) => runMap[c.id] = { scenario: c.scenario, saved: c });
-          setCameraRunning(runMap);
-          setStatus("Running");
-          return; 
+        const setRes = await fetch(`http://127.0.0.1:8000/api/config/settings/${adminId}`);
+        if (setRes.ok) {
+          const settings = await setRes.json();
+          setContinuousRunning(settings.continuous_running || false);
         }
-      } catch (e) {
-        console.log("No saved cameras found, purging ghosts...");
-      }
-      // If no cameras were loaded, forcefully nuke the backend ghosts
-      fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(()=>{});
+      } catch (e) { console.error("Toggle load failed", e); }
+
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/api/config/cameras/${adminId}`);
+        if (res.ok) {
+          const configs = await res.json();
+          if (configs.length > 0) {
+            const restored = configs.map((db: any) => {
+              const cfg = typeof db.config_json === 'string' ? JSON.parse(db.config_json) : db.config_json;
+              return {
+                id: db.camera_id,
+                name: cfg.camera_name || "Restored Camera",
+                scenario: cfg.scenario,
+                status: "Active",
+                source: `http://127.0.0.1:8000/cameras/stream/${db.camera_id}`,
+                type: cfg.video?.toString().includes('videos/') ? "file" : "ip",
+                serverSource: cfg.video 
+              };
+            });
+            setCameras(restored);
+            setSelectedCamera(restored[0].id);
+            setFullScreenCameraId(restored[0].id); 
+            
+            const runMap: any = {};
+            restored.forEach((c: any) => runMap[c.id] = { scenario: c.scenario, saved: c });
+            setCameraRunning(runMap);
+            setStatus("Running");
+          } else {
+            fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(()=>{});
+          }
+        }
+      } catch (e) { console.error("Camera load failed", e); }
     };
-    hydrateOrPurge();
+    
+    fetch("http://127.0.0.1:8000/api/clear-events", { method: "POST" }).catch(() => {});
+    loadDatabase();
   }, []);
 
   // Format Unix timestamp using browser local time: "03:09:42 AM"
@@ -237,6 +247,8 @@ export default function Admin() {
   const [aspectRatios, setAspectRatios] = useState<Record<string, number>>({});
   const [videoDims, setVideoDims] = useState<Record<string, { w: number; h: number }>>({});
   const [streamToken, setStreamToken] = useState<string | null>(null);  // unique token for backend stop
+  const [continuousRunning, setContinuousRunning] = useState(false);
+  const [pendingViewerReqs, setPendingViewerReqs] = useState<string[]>([]);
 
   // Per-camera running state: camera_id -> { scenario, savedCamera }
   const [cameraRunning, setCameraRunning] = useState<Record<string, { scenario: string; saved: Camera }>>({});
@@ -256,8 +268,36 @@ export default function Admin() {
     // do not auto-play when drawingLine turns false; user can manually resume
   }, [drawingLine]);
 
-  const handleLogout = () => {
-    // simple logout: navigate to home / login
+  // Poll for Viewer Access Requests
+  React.useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/admin/requests");
+        if (res.ok) {
+          const data = await res.json();
+          setPendingViewerReqs(data.requests || []);
+        }
+      } catch (e) { }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleResolveViewer = async (reqId: string, status: "accepted" | "rejected") => {
+    try {
+      await fetch(`http://127.0.0.1:8000/api/admin/resolve/${reqId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      setPendingViewerReqs(prev => prev.filter(id => id !== reqId));
+    } catch (e) { console.error(e); }
+  };
+
+  const handleLogout = async () => {
+    if (!continuousRunning) {
+      await fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(()=>{});
+    }
+    localStorage.clear();
     window.location.href = "/";
   };
 
@@ -416,6 +456,16 @@ export default function Admin() {
       setStatus("Idle");
       return;
     }
+
+    fetch("http://127.0.0.1:8000/api/config/cameras", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        admin_id: "global_admin",
+        camera_id: cam.id,
+        config_json: { ...body, camera_name: cam.name }
+      })
+    }).catch(err => console.error("DB Save Failed", err));
 
     // Point the camera tile at the per-camera MJPEG stream endpoint
     const streamUrl = `http://127.0.0.1:8000/cameras/stream/${cam.id}`;
@@ -985,6 +1035,35 @@ export default function Admin() {
         <span style={styles.sidebarLogoText}>VisionAI</span>
       </div>
 
+      {/* VIEWER REQUEST POPUP */}
+      <AnimatePresence>
+        {pendingViewerReqs.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: -50, x: "-50%" }}
+            style={{
+              position: "fixed", top: "24px", left: "50%", zIndex: 9999,
+              background: "#1a1a1a", color: "white", padding: "16px 24px",
+              borderRadius: "16px", boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+              display: "flex", alignItems: "center", gap: "20px"
+            }}
+          >
+            <div style={{ fontWeight: 600 }}>🔔 Viewer requesting live feed access!</div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button 
+                onClick={() => handleResolveViewer(pendingViewerReqs[0], "accepted")}
+                style={{ background: "#16a34a", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+              >Accept</button>
+              <button 
+                onClick={() => handleResolveViewer(pendingViewerReqs[0], "rejected")}
+                style={{ background: "#dc2626", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+              >Reject</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* SLIDING SIDEBAR OVERLAY */}
       <AnimatePresence>
         {isSidebarOpen && (
@@ -1049,6 +1128,26 @@ export default function Admin() {
             <p style={styles.subtitle}>Real-time video analysis and event detection</p>
           </div>
           <div style={{ ...styles.headerRight, position: "relative" }}>
+            <button 
+              style={{
+                ...styles.badge, 
+                background: continuousRunning ? "#8b5cf6" : "#f3f4f6", 
+                color: continuousRunning ? "white" : "#6b7280", 
+                marginRight: "10px" 
+              }}
+              onClick={async () => {
+                const newState = !continuousRunning;
+                setContinuousRunning(newState);
+                await fetch("http://127.0.0.1:8000/api/config/settings", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ admin_id: "global_admin", continuous_running: newState })
+                }).catch(e => console.error(e));
+              }}
+            >
+              Continuous: {continuousRunning ? "ON" : "OFF"}
+            </button>
+
             <button style={{
               ...styles.badge,
               background: (status === "Running" || Object.keys(cameraRunning).length > 0) ? "#16a34a" : "#dc2626",

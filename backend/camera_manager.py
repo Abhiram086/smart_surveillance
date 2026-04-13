@@ -398,6 +398,7 @@ def _annotator_thread_fn(camera_id: str, scenario: str, cfg: dict,
     with _stats_lock:
         _camera_stats[camera_id] = {
             "name":             cam_name,
+            "scenario":         scenario,
             "people_count":     0,
             "active_movers":    0,
             "active_runners":   0,
@@ -736,3 +737,19 @@ def status() -> list[dict]:
             }
             for cid, ev in _reader_stop.items()
         ]
+
+
+def get_active_cameras() -> list[dict]:
+    """Return metadata for all cameras that are currently alive in memory."""
+    with _registry_lock:
+        alive_ids = [cid for cid, ev in _reader_stop.items() if not ev.is_set()]
+    result = []
+    with _stats_lock:
+        for cid in alive_ids:
+            cs = _camera_stats.get(cid, {})
+            result.append({
+                "camera_id": cid,
+                "name":      cs.get("name", cid[:16]),
+                "scenario":  cs.get("scenario", "behavior"),
+            })
+    return result
