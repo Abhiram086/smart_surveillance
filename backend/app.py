@@ -409,6 +409,29 @@ def save_camera(payload: CameraConfigPayload, conn: connection = Depends(get_db_
             ON CONFLICT (camera_id) DO UPDATE SET config_json = EXCLUDED.config_json
         """, (payload.camera_id, payload.admin_id, json.dumps(payload.config_json)))
     conn.commit()
+
+    # ── Auto-start the camera hardware in memory after DB save ────────────
+    cfg = dict(payload.config_json)
+    scenario = cfg.pop("scenario", "behavior")
+    video = cfg.get("video", 0)
+    # Parse integer sources (webcam index like 0 or 1)
+    if isinstance(video, str) and video.strip().isdigit():
+        cfg["video"] = int(video.strip())
+    try:
+        req = StartCameraRequest(
+            camera_id=payload.camera_id,
+            scenario=scenario,
+            video=cfg.get("video"),
+        )
+        built_cfg = _build_cfg(scenario, req)
+        # Preserve camera_name from the original payload
+        if "camera_name" in payload.config_json:
+            built_cfg["camera_name"] = payload.config_json["camera_name"]
+        camera_manager.start(payload.camera_id, scenario, built_cfg)
+        print(f"\u2705 Auto-started camera {payload.camera_id} ({scenario})")
+    except Exception as e:
+        print(f"\u26a0\ufe0f Could not auto-start camera {payload.camera_id}: {e}")
+
     return {"saved": True}
 
 @app.get("/api/config/cameras/{admin_id}")
@@ -441,16 +464,19 @@ import uuid
 
 viewer_requests = {}
 
+class ViewerRequestPayload(BaseModel):
+    username: str = "Guest"
+
 @app.post("/api/viewer/request")
-def request_access():
+def request_access(payload: ViewerRequestPayload = ViewerRequestPayload()):
     req_id = str(uuid.uuid4())
-    viewer_requests[req_id] = {"status": "pending"}
+    viewer_requests[req_id] = {"status": "pending", "username": payload.username}
     return {"request_id": req_id}
 
 @app.get("/api/admin/requests")
 def get_pending_requests():
     pending = {k: v for k, v in viewer_requests.items() if v["status"] == "pending"}
-    return {"requests": list(pending.keys())}
+    return {"requests": [{"req_id": k, "username": v.get("username", "Unknown User")} for k, v in pending.items()]}
 
 class ResolvePayload(BaseModel):
     status: str

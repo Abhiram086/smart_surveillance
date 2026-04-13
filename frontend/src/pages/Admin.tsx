@@ -154,8 +154,8 @@ export default function Admin() {
 
   React.useEffect(() => {
     const loadDatabase = async () => {
-      const adminId = "global_admin"; 
-      
+      const adminId = "global_admin";
+
       try {
         const setRes = await fetch(`http://127.0.0.1:8000/api/config/settings/${adminId}`);
         if (setRes.ok) {
@@ -178,25 +178,25 @@ export default function Admin() {
                 status: "Active",
                 source: `http://127.0.0.1:8000/cameras/stream/${db.camera_id}`,
                 type: cfg.video?.toString().includes('videos/') ? "file" : "ip",
-                serverSource: cfg.video 
+                serverSource: cfg.video
               };
             });
             setCameras(restored);
             setSelectedCamera(restored[0].id);
-            setFullScreenCameraId(restored[0].id); 
-            
+            setFullScreenCameraId(restored[0].id);
+
             const runMap: any = {};
             restored.forEach((c: any) => runMap[c.id] = { scenario: c.scenario, saved: c });
             setCameraRunning(runMap);
             setStatus("Running");
           } else {
-            fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(()=>{});
+            fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(() => { });
           }
         }
       } catch (e) { console.error("Camera load failed", e); }
     };
-    
-    fetch("http://127.0.0.1:8000/api/clear-events", { method: "POST" }).catch(() => {});
+
+    fetch("http://127.0.0.1:8000/api/clear-events", { method: "POST" }).catch(() => { });
     loadDatabase();
   }, []);
 
@@ -248,7 +248,7 @@ export default function Admin() {
   const [videoDims, setVideoDims] = useState<Record<string, { w: number; h: number }>>({});
   const [streamToken, setStreamToken] = useState<string | null>(null);  // unique token for backend stop
   const [continuousRunning, setContinuousRunning] = useState(false);
-  const [pendingViewerReqs, setPendingViewerReqs] = useState<string[]>([]);
+  const [pendingViewerReqs, setPendingViewerReqs] = useState<{req_id: string, username: string}[]>([]);
 
   // Per-camera running state: camera_id -> { scenario, savedCamera }
   const [cameraRunning, setCameraRunning] = useState<Record<string, { scenario: string; saved: Camera }>>({});
@@ -289,13 +289,13 @@ export default function Admin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
       });
-      setPendingViewerReqs(prev => prev.filter(id => id !== reqId));
+      setPendingViewerReqs(prev => prev.filter(r => r.req_id !== reqId));
     } catch (e) { console.error(e); }
   };
 
   const handleLogout = async () => {
     if (!continuousRunning) {
-      await fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(()=>{});
+      await fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(() => { });
     }
     localStorage.clear();
     window.location.href = "/";
@@ -697,16 +697,16 @@ export default function Admin() {
     } catch (err) {
       console.error(err);
     }
-    
+
     const filtered = cameras.filter(cam => cam.id !== id);
     setCameras(filtered);
     if (selectedCamera === id) {
       setSelectedCamera(filtered.length > 0 ? filtered[0].id : null);
     }
-    
+
     // If we just deleted the very last camera, force-reset the system stats to zero
     if (filtered.length === 0) {
-      fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(()=>{});
+      fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(() => { });
       setStatus("Idle");
     }
   };
@@ -1049,14 +1049,14 @@ export default function Admin() {
               display: "flex", alignItems: "center", gap: "20px"
             }}
           >
-            <div style={{ fontWeight: 600 }}>🔔 Viewer requesting live feed access!</div>
+            <div style={{ fontWeight: 600 }}>🔔 {pendingViewerReqs[0].username} is requesting live feed access!</div>
             <div style={{ display: "flex", gap: "10px" }}>
-              <button 
-                onClick={() => handleResolveViewer(pendingViewerReqs[0], "accepted")}
+              <button
+                onClick={() => handleResolveViewer(pendingViewerReqs[0].req_id, "accepted")}
                 style={{ background: "#16a34a", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
               >Accept</button>
-              <button 
-                onClick={() => handleResolveViewer(pendingViewerReqs[0], "rejected")}
+              <button
+                onClick={() => handleResolveViewer(pendingViewerReqs[0].req_id, "rejected")}
                 style={{ background: "#dc2626", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
               >Reject</button>
             </div>
@@ -1103,6 +1103,67 @@ export default function Admin() {
               </div>
             </div>
 
+            {/* ADD NEW CAMERA SECTION */}
+            <div style={{ marginTop: "20px", borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+              <div style={{ fontWeight: 700, fontSize: "13px", color: "#8b5cf6", marginBottom: "12px", paddingLeft: "8px" }}>➕ Add New Camera</div>
+              <div style={{ padding: "0 8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <input
+                  id="add-cam-id"
+                  placeholder="Camera ID (e.g. cam_front)"
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13px", outline: "none" }}
+                />
+                <input
+                  id="add-cam-name"
+                  placeholder="Camera Name"
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13px", outline: "none" }}
+                />
+                <input
+                  id="add-cam-source"
+                  placeholder="Source (RTSP / 0 for webcam)"
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13px", outline: "none" }}
+                />
+                <button
+                  onClick={async () => {
+                    const camId = (document.getElementById("add-cam-id") as HTMLInputElement).value.trim();
+                    const camName = (document.getElementById("add-cam-name") as HTMLInputElement).value.trim();
+                    const camSrc = (document.getElementById("add-cam-source") as HTMLInputElement).value.trim();
+                    if (!camId || !camName || !camSrc) { alert("Please fill in all fields."); return; }
+                    // Parse single-digit integers for webcam indices
+                    const videoValue = /^\d+$/.test(camSrc) ? parseInt(camSrc, 10) : camSrc;
+                    try {
+                      const res = await fetch("http://127.0.0.1:8000/api/config/cameras", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          admin_id: "global_admin",
+                          camera_id: camId,
+                          config_json: {
+                            camera_name: camName,
+                            video: videoValue,
+                            scenario: "behavior"
+                          }
+                        })
+                      });
+                      if (res.ok) {
+                        const newCam: Camera = { id: camId, name: camName, status: "Active", source: typeof videoValue === "number" ? String(videoValue) : camSrc, type: typeof videoValue === "number" ? "webcam" : "ip" };
+                        setCameras(prev => [...prev, newCam]);
+                        setSelectedCamera(newCam.id);
+                        (document.getElementById("add-cam-id") as HTMLInputElement).value = "";
+                        (document.getElementById("add-cam-name") as HTMLInputElement).value = "";
+                        (document.getElementById("add-cam-source") as HTMLInputElement).value = "";
+                      } else { alert("Failed to save camera."); }
+                    } catch (err) { console.error(err); alert("Could not connect to backend."); }
+                  }}
+                  style={{
+                    background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+                    color: "white", border: "none", padding: "10px 16px",
+                    borderRadius: "10px", cursor: "pointer", fontWeight: "bold",
+                    fontSize: "13px", boxShadow: "0 4px 12px rgba(139,92,246,0.3)"
+                  }}
+                >Save & Start Camera</button>
+              </div>
+            </div>
+
             <div style={styles.sidebarBottom}>
               <div style={styles.sidebarNavItem}>
                 <span style={{ marginRight: "12px" }}></span> Support
@@ -1128,12 +1189,12 @@ export default function Admin() {
             <p style={styles.subtitle}>Real-time video analysis and event detection</p>
           </div>
           <div style={{ ...styles.headerRight, position: "relative" }}>
-            <button 
+            <button
               style={{
-                ...styles.badge, 
-                background: continuousRunning ? "#8b5cf6" : "#f3f4f6", 
-                color: continuousRunning ? "white" : "#6b7280", 
-                marginRight: "10px" 
+                ...styles.badge,
+                background: continuousRunning ? "#8b5cf6" : "#f3f4f6",
+                color: continuousRunning ? "white" : "#6b7280",
+                marginRight: "10px"
               }}
               onClick={async () => {
                 const newState = !continuousRunning;
