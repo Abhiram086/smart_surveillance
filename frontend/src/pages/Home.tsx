@@ -143,6 +143,7 @@ export default function Home() {
         localStorage.setItem("authToken", "logged-in")
         localStorage.setItem("role", data.user.role)
         localStorage.setItem("username", data.user.username)
+        localStorage.setItem("auth_user", JSON.stringify(data.user))
         navigate("/admin-dashboard")
       }
     } catch {
@@ -171,6 +172,7 @@ export default function Home() {
         localStorage.setItem("authToken", "logged-in")
         localStorage.setItem("role", data.user.role)
         localStorage.setItem("username", data.user.username)
+        localStorage.setItem("auth_user", JSON.stringify(data.user))
         navigate("/viewer-dashboard")
       }
     } catch {

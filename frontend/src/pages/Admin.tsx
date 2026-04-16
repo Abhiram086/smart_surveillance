@@ -146,15 +146,58 @@ export default function Admin() {
   const [behaviorConf, setBehaviorConf] = useState({ normal: 100, loitering: 0, fast_movement: 0 });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  
+
   const [activeReport, setActiveReport] = useState<any>(null);
   const dismissedReportsRef = React.useRef<Set<string>>(new Set());
   const [activeEventTab, setActiveEventTab] = useState<'events' | 'alerts'>('events');
   const [eventViewMode, setEventViewMode] = useState<'timeline' | 'source'>('source');
 
-  // Clear stale events from previous sessions on mount
   React.useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/clear-events", { method: "POST" }).catch(() => {});
+    const loadDatabase = async () => {
+      const adminId = "global_admin";
+
+      try {
+        const setRes = await fetch(`http://127.0.0.1:8000/api/config/settings/${adminId}`);
+        if (setRes.ok) {
+          const settings = await setRes.json();
+          setContinuousRunning(settings.continuous_running || false);
+        }
+      } catch (e) { console.error("Toggle load failed", e); }
+
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/api/config/cameras/${adminId}`);
+        if (res.ok) {
+          const configs = await res.json();
+          if (configs.length > 0) {
+            const restored = configs.map((db: any) => {
+              const cfg = typeof db.config_json === 'string' ? JSON.parse(db.config_json) : db.config_json;
+              return {
+                id: db.camera_id,
+                name: cfg.camera_name || "Restored Camera",
+                scenario: cfg.scenario,
+                status: "Active",
+                source: `http://127.0.0.1:8000/cameras/stream/${db.camera_id}`,
+                type: cfg.video?.toString().includes('videos/') ? "file" : "ip",
+                serverSource: cfg.video
+              };
+            });
+            setCameras(restored);
+            setSelectedCamera(restored[0].id);
+            setFullScreenCameraId(restored[0].id);
+
+            const runMap: any = {};
+            restored.forEach((c: any) => runMap[c.id] = { scenario: c.scenario, saved: c });
+            setCameraRunning(runMap);
+            setStatus("Running");
+          } else {
+            fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(() => { });
+          }
+        }
+      } catch (e) { console.error("Camera load failed", e); }
+    };
+
+    fetch("http://127.0.0.1:8000/api/clear-events", { method: "POST" }).catch(() => { });
+    loadDatabase();
   }, []);
 
   // Format Unix timestamp using browser local time: "03:09:42 AM"
@@ -204,6 +247,8 @@ export default function Admin() {
   const [aspectRatios, setAspectRatios] = useState<Record<string, number>>({});
   const [videoDims, setVideoDims] = useState<Record<string, { w: number; h: number }>>({});
   const [streamToken, setStreamToken] = useState<string | null>(null);  // unique token for backend stop
+  const [continuousRunning, setContinuousRunning] = useState(false);
+  const [pendingViewerReqs, setPendingViewerReqs] = useState<{req_id: string, username: string}[]>([]);
 
   // Per-camera running state: camera_id -> { scenario, savedCamera }
   const [cameraRunning, setCameraRunning] = useState<Record<string, { scenario: string; saved: Camera }>>({});
@@ -223,8 +268,36 @@ export default function Admin() {
     // do not auto-play when drawingLine turns false; user can manually resume
   }, [drawingLine]);
 
-  const handleLogout = () => {
-    // simple logout: navigate to home / login
+  // Poll for Viewer Access Requests
+  React.useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/admin/requests");
+        if (res.ok) {
+          const data = await res.json();
+          setPendingViewerReqs(data.requests || []);
+        }
+      } catch (e) { }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleResolveViewer = async (reqId: string, status: "accepted" | "rejected") => {
+    try {
+      await fetch(`http://127.0.0.1:8000/api/admin/resolve/${reqId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      setPendingViewerReqs(prev => prev.filter(r => r.req_id !== reqId));
+    } catch (e) { console.error(e); }
+  };
+
+  const handleLogout = async () => {
+    if (!continuousRunning) {
+      await fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(() => { });
+    }
+    localStorage.clear();
     window.location.href = "/";
   };
 
@@ -309,7 +382,7 @@ export default function Admin() {
     setStatus("Running");
     setDrawingLine(false);
     setDrawingZone(false);
-    
+
     if (selectedCamera) {
       dismissedReportsRef.current.delete(selectedCamera);
     }
@@ -383,6 +456,16 @@ export default function Admin() {
       setStatus("Idle");
       return;
     }
+
+    fetch("http://127.0.0.1:8000/api/config/cameras", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        admin_id: "global_admin",
+        camera_id: cam.id,
+        config_json: { ...body, camera_name: cam.name }
+      })
+    }).catch(err => console.error("DB Save Failed", err));
 
     // Point the camera tile at the per-camera MJPEG stream endpoint
     const streamUrl = `http://127.0.0.1:8000/cameras/stream/${cam.id}`;
@@ -607,11 +690,24 @@ export default function Admin() {
     }
   };
 
-  const handleRemoveCamera = (id: string) => {
+  const handleRemoveCamera = async (id: string) => {
+    try {
+      await fetch("http://127.0.0.1:8000/cameras/stop?camera_id=" + id, { method: "POST" });
+      await fetch("http://127.0.0.1:8000/api/config/cameras/" + id, { method: "DELETE" });
+    } catch (err) {
+      console.error(err);
+    }
+
     const filtered = cameras.filter(cam => cam.id !== id);
     setCameras(filtered);
     if (selectedCamera === id) {
       setSelectedCamera(filtered.length > 0 ? filtered[0].id : null);
+    }
+
+    // If we just deleted the very last camera, force-reset the system stats to zero
+    if (filtered.length === 0) {
+      fetch("http://127.0.0.1:8000/api/system/reset", { method: "POST" }).catch(() => { });
+      setStatus("Idle");
     }
   };
 
@@ -870,8 +966,8 @@ export default function Admin() {
   // Threat Assessment Radar Calculation
   // Count loitering and running events from the event log for radar
   const loiteringEventCount = events.filter((e: any) => e.message && e.message.toLowerCase().includes('loiter')).length;
-  const runningEventCount   = events.filter((e: any) => e.message && e.message.toLowerCase().includes('running')).length;
-  const alertEventCount     = events.filter((e: any) => e.severity === 'error' || e.severity === 'warning').length;
+  const runningEventCount = events.filter((e: any) => e.message && e.message.toLowerCase().includes('running')).length;
+  const alertEventCount = events.filter((e: any) => e.severity === 'error' || e.severity === 'warning').length;
 
   const threatStats = [
     Math.max(5, Math.min(100, (peopleCount / 20) * 100)),                           // Crowd density
@@ -915,7 +1011,7 @@ export default function Admin() {
       `}</style>
 
       {/* SCROLL TRANSITION TOP BAR */}
-      <div 
+      <div
         style={{
           position: "fixed",
           top: 0, left: 0, right: 0,
@@ -931,13 +1027,42 @@ export default function Admin() {
       />
 
       {/* ALWAYS VISIBLE LOGO (absolute/fixed) */}
-      <div 
+      <div
         style={{ ...styles.sidebarLogoWrapper, position: "fixed", top: "24px", left: "24px", zIndex: 1000, cursor: "pointer", paddingLeft: 0, marginBottom: 0 }}
         onClick={(e) => { e.stopPropagation(); setIsSidebarOpen(!isSidebarOpen); }}
       >
         <div style={styles.sidebarLogoIcon}>🛡️</div>
         <span style={styles.sidebarLogoText}>VisionAI</span>
       </div>
+
+      {/* VIEWER REQUEST POPUP */}
+      <AnimatePresence>
+        {pendingViewerReqs.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: -50, x: "-50%" }}
+            style={{
+              position: "fixed", top: "24px", left: "50%", zIndex: 9999,
+              background: "#1a1a1a", color: "white", padding: "16px 24px",
+              borderRadius: "16px", boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+              display: "flex", alignItems: "center", gap: "20px"
+            }}
+          >
+            <div style={{ fontWeight: 600 }}>🔔 {pendingViewerReqs[0].username} is requesting live feed access!</div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => handleResolveViewer(pendingViewerReqs[0].req_id, "accepted")}
+                style={{ background: "#16a34a", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+              >Accept</button>
+              <button
+                onClick={() => handleResolveViewer(pendingViewerReqs[0].req_id, "rejected")}
+                style={{ background: "#dc2626", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+              >Reject</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* SLIDING SIDEBAR OVERLAY */}
       <AnimatePresence>
@@ -978,6 +1103,67 @@ export default function Admin() {
               </div>
             </div>
 
+            {/* ADD NEW CAMERA SECTION */}
+            <div style={{ marginTop: "20px", borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+              <div style={{ fontWeight: 700, fontSize: "13px", color: "#8b5cf6", marginBottom: "12px", paddingLeft: "8px" }}>➕ Add New Camera</div>
+              <div style={{ padding: "0 8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <input
+                  id="add-cam-id"
+                  placeholder="Camera ID (e.g. cam_front)"
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13px", outline: "none" }}
+                />
+                <input
+                  id="add-cam-name"
+                  placeholder="Camera Name"
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13px", outline: "none" }}
+                />
+                <input
+                  id="add-cam-source"
+                  placeholder="Source (RTSP / 0 for webcam)"
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13px", outline: "none" }}
+                />
+                <button
+                  onClick={async () => {
+                    const camId = (document.getElementById("add-cam-id") as HTMLInputElement).value.trim();
+                    const camName = (document.getElementById("add-cam-name") as HTMLInputElement).value.trim();
+                    const camSrc = (document.getElementById("add-cam-source") as HTMLInputElement).value.trim();
+                    if (!camId || !camName || !camSrc) { alert("Please fill in all fields."); return; }
+                    // Parse single-digit integers for webcam indices
+                    const videoValue = /^\d+$/.test(camSrc) ? parseInt(camSrc, 10) : camSrc;
+                    try {
+                      const res = await fetch("http://127.0.0.1:8000/api/config/cameras", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          admin_id: "global_admin",
+                          camera_id: camId,
+                          config_json: {
+                            camera_name: camName,
+                            video: videoValue,
+                            scenario: "behavior"
+                          }
+                        })
+                      });
+                      if (res.ok) {
+                        const newCam: Camera = { id: camId, name: camName, status: "Active", source: typeof videoValue === "number" ? String(videoValue) : camSrc, type: typeof videoValue === "number" ? "webcam" : "ip" };
+                        setCameras(prev => [...prev, newCam]);
+                        setSelectedCamera(newCam.id);
+                        (document.getElementById("add-cam-id") as HTMLInputElement).value = "";
+                        (document.getElementById("add-cam-name") as HTMLInputElement).value = "";
+                        (document.getElementById("add-cam-source") as HTMLInputElement).value = "";
+                      } else { alert("Failed to save camera."); }
+                    } catch (err) { console.error(err); alert("Could not connect to backend."); }
+                  }}
+                  style={{
+                    background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+                    color: "white", border: "none", padding: "10px 16px",
+                    borderRadius: "10px", cursor: "pointer", fontWeight: "bold",
+                    fontSize: "13px", boxShadow: "0 4px 12px rgba(139,92,246,0.3)"
+                  }}
+                >Save & Start Camera</button>
+              </div>
+            </div>
+
             <div style={styles.sidebarBottom}>
               <div style={styles.sidebarNavItem}>
                 <span style={{ marginRight: "12px" }}></span> Support
@@ -1003,6 +1189,26 @@ export default function Admin() {
             <p style={styles.subtitle}>Real-time video analysis and event detection</p>
           </div>
           <div style={{ ...styles.headerRight, position: "relative" }}>
+            <button
+              style={{
+                ...styles.badge,
+                background: continuousRunning ? "#8b5cf6" : "#f3f4f6",
+                color: continuousRunning ? "white" : "#6b7280",
+                marginRight: "10px"
+              }}
+              onClick={async () => {
+                const newState = !continuousRunning;
+                setContinuousRunning(newState);
+                await fetch("http://127.0.0.1:8000/api/config/settings", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ admin_id: "global_admin", continuous_running: newState })
+                }).catch(e => console.error(e));
+              }}
+            >
+              Continuous: {continuousRunning ? "ON" : "OFF"}
+            </button>
+
             <button style={{
               ...styles.badge,
               background: (status === "Running" || Object.keys(cameraRunning).length > 0) ? "#16a34a" : "#dc2626",
@@ -1103,7 +1309,7 @@ export default function Admin() {
             <div style={styles.videoPanel}>
               <div style={styles.videoPanelHeader}>
                 <div style={styles.panelTitle}>
-                  {fullScreenCameraId 
+                  {fullScreenCameraId
                     ? cameras.find(c => c.id === fullScreenCameraId)?.name || 'Camera Feed'
                     : 'Glance Overview'}
                 </div>
@@ -1370,12 +1576,12 @@ export default function Admin() {
                     {Array.from({ length: 5 }).map((_, i) => {
                       const angle = (Math.PI * -0.5) + (i * ((Math.PI * 2) / 5));
                       return (
-                        <line 
-                          key={i} 
-                          x1="100" y1="100" 
-                          x2={100 + 100 * Math.cos(angle)} 
-                          y2={100 + 100 * Math.sin(angle)} 
-                          stroke="#e5e7eb" strokeWidth="1" 
+                        <line
+                          key={i}
+                          x1="100" y1="100"
+                          x2={100 + 100 * Math.cos(angle)}
+                          y2={100 + 100 * Math.sin(angle)}
+                          stroke="#e5e7eb" strokeWidth="1"
                         />
                       );
                     })}
@@ -1385,7 +1591,7 @@ export default function Admin() {
                   <svg width="200" height="200" style={{ position: "absolute", zIndex: 5, transition: "all 0.5s ease" }}>
                     <polygon points={polygonPoints} fill="rgba(139, 92, 246, 0.3)" stroke="#8b5cf6" strokeWidth="2" style={{ transition: "all 0.5s ease" }} />
                   </svg>
-                  
+
                   {/* Vector Labels */}
                   <div style={{ position: "absolute", top: "0px", left: "50%", transform: "translateX(-50%)", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Crowd</div>
                   <div style={{ position: "absolute", top: "35%", right: "-5px", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Activity</div>
@@ -1454,13 +1660,13 @@ export default function Admin() {
             <div style={{ ...styles.controlPanel, height: "450px", display: "flex", flexDirection: "column" }}>
               <div style={{ ...styles.tabsContainer, justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: "12px" }}>
-                  <button 
+                  <button
                     style={activeEventTab === 'events' ? styles.tabActive : styles.tabInactive}
                     onClick={() => setActiveEventTab('events')}
                   >
                     Event Log
                   </button>
-                  <button 
+                  <button
                     style={activeEventTab === 'alerts' ? styles.tabActive : styles.tabInactive}
                     onClick={() => setActiveEventTab('alerts')}
                   >
@@ -1468,10 +1674,10 @@ export default function Admin() {
                   </button>
                 </div>
                 <div style={{ display: "flex", background: "#f3f4f6", borderRadius: "10px", padding: "2px" }}>
-                  <button 
+                  <button
                     onClick={() => setEventViewMode('timeline')}
-                    style={{ 
-                      padding: "4px 8px", fontSize: "10px", borderRadius: "8px", border: "none", 
+                    style={{
+                      padding: "4px 8px", fontSize: "10px", borderRadius: "8px", border: "none",
                       background: eventViewMode === 'timeline' ? "white" : "transparent",
                       boxShadow: eventViewMode === 'timeline' ? "0 2px 4px rgba(0,0,0,0.05)" : "none",
                       color: eventViewMode === 'timeline' ? "#1a1a1a" : "#6b7280",
@@ -1480,10 +1686,10 @@ export default function Admin() {
                   >
                     Timeline
                   </button>
-                  <button 
+                  <button
                     onClick={() => setEventViewMode('source')}
-                    style={{ 
-                      padding: "4px 8px", fontSize: "10px", borderRadius: "8px", border: "none", 
+                    style={{
+                      padding: "4px 8px", fontSize: "10px", borderRadius: "8px", border: "none",
                       background: eventViewMode === 'source' ? "white" : "transparent",
                       boxShadow: eventViewMode === 'source' ? "0 2px 4px rgba(0,0,0,0.05)" : "none",
                       color: eventViewMode === 'source' ? "#1a1a1a" : "#6b7280",
@@ -1497,7 +1703,7 @@ export default function Admin() {
 
               <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "10px", padding: "10px 0" }}>
                 {(() => {
-                  const filtered = activeEventTab === 'alerts' 
+                  const filtered = activeEventTab === 'alerts'
                     ? events.filter(e => e.severity === 'error' || e.severity === 'warning')
                     : events;
 
@@ -1885,12 +2091,12 @@ export default function Admin() {
                           {Array.from({ length: 5 }).map((_, i) => {
                             const angle = (Math.PI * -0.5) + (i * ((Math.PI * 2) / 5));
                             return (
-                              <line 
-                                key={i} 
-                                x1="100" y1="100" 
-                                x2={100 + 100 * Math.cos(angle)} 
-                                y2={100 + 100 * Math.sin(angle)} 
-                                stroke="#e5e7eb" strokeWidth="1" 
+                              <line
+                                key={i}
+                                x1="100" y1="100"
+                                x2={100 + 100 * Math.cos(angle)}
+                                y2={100 + 100 * Math.sin(angle)}
+                                stroke="#e5e7eb" strokeWidth="1"
                               />
                             );
                           })}
@@ -1899,7 +2105,7 @@ export default function Admin() {
                         <svg width="200" height="200" style={{ position: "absolute", zIndex: 5, transition: "all 0.5s ease" }}>
                           <polygon points={polygonPoints} fill="rgba(139, 92, 246, 0.4)" stroke="#8b5cf6" strokeWidth="2" style={{ transition: "all 0.5s ease" }} />
                         </svg>
-                        
+
                         <div style={{ position: "absolute", top: "0px", left: "50%", transform: "translateX(-50%)", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Crowd</div>
                         <div style={{ position: "absolute", top: "35%", right: "-5px", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Activity</div>
                         <div style={{ position: "absolute", bottom: "0px", right: "15%", fontSize: "11px", fontWeight: 600, color: "#6b7280" }}>Alerts</div>
@@ -1941,10 +2147,10 @@ export default function Admin() {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div style={{ marginTop: "24px", display: "flex", justifyContent: "center" }}>
                     <button onClick={() => setActiveReport(null)} style={{ padding: "12px 32px", borderRadius: "24px", background: "#f9fafb", border: "1px solid #d1d5db", fontWeight: 600, color: "#374151", cursor: "pointer", fontSize: "16px" }}>
-                        Close
+                      Close
                     </button>
                   </div>
                 </motion.div>

@@ -68,6 +68,10 @@ def on_startup() -> None:
     conn = next(db_dep)
     try:
         create_tables(conn)
+        with conn.cursor() as cur:
+            cur.execute("CREATE TABLE IF NOT EXISTS admin_settings (admin_id TEXT PRIMARY KEY, continuous_running BOOLEAN DEFAULT FALSE)")
+            cur.execute("CREATE TABLE IF NOT EXISTS camera_configs (camera_id TEXT PRIMARY KEY, admin_id TEXT NOT NULL, config_json JSONB NOT NULL)")
+        conn.commit()
     except Exception as exc:
         print(f"startup: {exc}")
     finally:
@@ -329,3 +333,163 @@ def api_clear_events():
     """Clear all in-memory events — called when the admin page loads."""
     camera_manager.clear_all_events()
     return {"cleared": True}
+
+@app.get("/api/stats")
+def api_stats():
+    """Returns the latest aggregated stats and events across all active cameras."""
+    return camera_manager.get_stats()
+
+
+@app.post("/api/clear-events")
+def api_clear_events():
+    """Clear all in-memory events — called when the admin page loads."""
+    camera_manager.clear_all_events()
+    return {"cleared": True}
+
+
+# ── DATABASE PERSISTENCE ENDPOINTS & AUTO-BOOT ───────────────────────────────
+class AdminSettingsPayload(BaseModel):
+    admin_id: str
+    continuous_running: bool
+
+class CameraConfigPayload(BaseModel):
+    admin_id: str
+    camera_id: str
+    config_json: dict
+
+@app.on_event("startup")
+def auto_boot_cameras() -> None:
+    print("Starting auto-boot sequence...")
+    db_dep = get_db_connection()
+    try:
+        conn = next(db_dep)
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT admin_id FROM admin_settings WHERE continuous_running = TRUE")
+            active_admins = cursor.fetchall()
+            for (admin_id,) in active_admins:
+                cursor.execute("SELECT camera_id, config_json FROM camera_configs WHERE admin_id = %s", (admin_id,))
+                for cam_id, raw_cfg in cursor.fetchall():
+                    cfg = json.loads(raw_cfg) if isinstance(raw_cfg, str) else raw_cfg
+                    scenario = cfg.get("scenario", "behavior")
+                    try:
+                        req = StartCameraRequest(camera_id=cam_id, scenario=scenario, **cfg)
+                        built_cfg = _build_cfg(scenario, req)
+                        camera_manager.start(cam_id, scenario, built_cfg)
+                        print(f"✅ Auto-booted camera {cam_id} for admin {admin_id}")
+                    except Exception as e:
+                        print(f"❌ Failed to auto-boot {cam_id}: {e}")
+    except Exception as e:
+        print(f"⚠️ DB Setup Error: {e}")
+    finally:
+        db_dep.close()
+
+@app.post("/api/config/settings")
+def save_settings(payload: AdminSettingsPayload, conn: connection = Depends(get_db_connection)):
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO admin_settings (admin_id, continuous_running) VALUES (%s, %s)
+            ON CONFLICT (admin_id) DO UPDATE SET continuous_running = EXCLUDED.continuous_running
+        """, (payload.admin_id, payload.continuous_running))
+    conn.commit()
+    return {"saved": True}
+
+@app.get("/api/config/settings/{admin_id}")
+def get_settings(admin_id: str, conn: connection = Depends(get_db_connection)):
+    with conn.cursor() as cur:
+        cur.execute("SELECT continuous_running FROM admin_settings WHERE admin_id = %s", (admin_id,))
+        row = cur.fetchone()
+        return {"continuous_running": row[0] if row else False}
+
+@app.post("/api/config/cameras")
+def save_camera(payload: CameraConfigPayload, conn: connection = Depends(get_db_connection)):
+    import json
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO camera_configs (camera_id, admin_id, config_json) VALUES (%s, %s, %s::jsonb)
+            ON CONFLICT (camera_id) DO UPDATE SET config_json = EXCLUDED.config_json
+        """, (payload.camera_id, payload.admin_id, json.dumps(payload.config_json)))
+    conn.commit()
+
+    # ── Auto-start the camera hardware in memory after DB save ────────────
+    cfg = dict(payload.config_json)
+    scenario = cfg.pop("scenario", "behavior")
+    video = cfg.get("video", 0)
+    # Parse integer sources (webcam index like 0 or 1)
+    if isinstance(video, str) and video.strip().isdigit():
+        cfg["video"] = int(video.strip())
+    try:
+        req = StartCameraRequest(
+            camera_id=payload.camera_id,
+            scenario=scenario,
+            video=cfg.get("video"),
+        )
+        built_cfg = _build_cfg(scenario, req)
+        # Preserve camera_name from the original payload
+        if "camera_name" in payload.config_json:
+            built_cfg["camera_name"] = payload.config_json["camera_name"]
+        camera_manager.start(payload.camera_id, scenario, built_cfg)
+        print(f"\u2705 Auto-started camera {payload.camera_id} ({scenario})")
+    except Exception as e:
+        print(f"\u26a0\ufe0f Could not auto-start camera {payload.camera_id}: {e}")
+
+    return {"saved": True}
+
+@app.get("/api/config/cameras/{admin_id}")
+def get_cameras(admin_id: str, conn: connection = Depends(get_db_connection)):
+    with conn.cursor() as cur:
+        cur.execute("SELECT camera_id, config_json FROM camera_configs WHERE admin_id = %s", (admin_id,))
+        return [{"camera_id": r[0], "config_json": r[1]} for r in cur.fetchall()]
+
+@app.post("/api/system/reset")
+def reset_system():
+    camera_manager.stop_all()
+    camera_manager.clear_all_events()
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM camera_configs WHERE admin_id = 'global_admin'")
+        conn.commit()
+    return {"reset": True}
+
+
+# ── LIVE CAMERA DISCOVERY (from memory, not DB) ─────────────────────────────
+
+@app.get("/api/system/active_cameras")
+def active_cameras():
+    """Return cameras that are actively running in memory right now."""
+    return camera_manager.get_active_cameras()
+
+
+# ── VIEWER ACCESS CONTROL ────────────────────────────────────────────────────
+import uuid
+
+viewer_requests = {}
+
+class ViewerRequestPayload(BaseModel):
+    username: str = "Guest"
+
+@app.post("/api/viewer/request")
+def request_access(payload: ViewerRequestPayload = ViewerRequestPayload()):
+    req_id = str(uuid.uuid4())
+    viewer_requests[req_id] = {"status": "pending", "username": payload.username}
+    return {"request_id": req_id}
+
+@app.get("/api/admin/requests")
+def get_pending_requests():
+    pending = {k: v for k, v in viewer_requests.items() if v["status"] == "pending"}
+    return {"requests": [{"req_id": k, "username": v.get("username", "Unknown User")} for k, v in pending.items()]}
+
+class ResolvePayload(BaseModel):
+    status: str
+
+@app.post("/api/admin/resolve/{req_id}")
+def resolve_request(req_id: str, payload: ResolvePayload):
+    if req_id in viewer_requests:
+        viewer_requests[req_id]["status"] = payload.status
+        return {"success": True}
+    return {"success": False}
+
+@app.get("/api/viewer/status/{req_id}")
+def get_request_status(req_id: str):
+    if req_id in viewer_requests:
+        return viewer_requests[req_id]
+    return {"status": "unknown"}
